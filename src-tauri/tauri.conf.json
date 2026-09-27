@@ -1,35 +1,31 @@
 {
+  "$schema": "../node_modules/@tauri-apps/cli/schema.json",
   "build": {
-    "beforeDevCommand": "npm run dev",
     "beforeBuildCommand": "npm run build",
+    "beforeDevCommand": "npm run dev",
     "devPath": "http://localhost:1420",
-    "distDir": "../dist",
-    "withGlobalTauri": false
+    "distDir": "../dist"
   },
   "package": {
-    "productName": "Tauri 3D Boilerplate",
-    "version": "0.0.0"
+    "productName": "SpideyVerse",
+    "version": "0.1.0"
   },
   "tauri": {
     "allowlist": {
-      "window": {
-        "all": true
-      },
-
-      "fs":{
-          "all":true
-        },
-      "path": {
-        "all": true
-      },
-      "all": true,
-      "shell": {
+      "all": false,
+      "process": {
         "all": false,
-        "open": true
+        "exit": true
       }
     },
     "bundle": {
       "active": true,
+      "category": "Game",
+      "copyright": "",
+      "deb": {
+        "depends": []
+      },
+      "externalBin": [],
       "icon": [
         "icons/32x32.png",
         "icons/128x128.png",
@@ -37,8 +33,23 @@
         "icons/icon.icns",
         "icons/icon.ico"
       ],
-      "identifier": "com.tauri.dev",
-      "targets": "all"
+      "identifier": "com.spideyverse.app",
+      "longDescription": "",
+      "macOS": {
+        "entitlements": null,
+        "exceptionDomain": "",
+        "frameworks": [],
+        "providerShortName": null,
+        "signingIdentity": null
+      },
+      "resources": [],
+      "shortDescription": "",
+      "targets": "all",
+      "windows": {
+        "certificateThumbprint": null,
+        "digestAlgorithm": "sha256",
+        "timestampUrl": ""
+      }
     },
     "security": {
       "csp": null
@@ -48,11 +59,11 @@
     },
     "windows": [
       {
-        "fullscreen": true,
+        "fullscreen": false,
+        "height": 800,
         "resizable": true,
-        "title": "Tauri 3D Boilerplate",
-        "width": 800,
-        "height": 600
+        "title": "SpideyVerse",
+        "width": 1280
       }
     ]
   }

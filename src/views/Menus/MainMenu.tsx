@@ -19,7 +19,7 @@ function MainMenu() {
   const navigate = useNavigate();
 
   const closeTauriApp = async () => {
-    await exit(1);
+    await exit(0);
   };
 
   return (
