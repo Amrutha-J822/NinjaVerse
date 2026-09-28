@@ -2,7 +2,7 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 
-import { exit } from '@tauri-apps/api/process';
+import { exit } from '@tauri-apps/plugin-process';
 
 import ButtonClickSFX from '../../assets/Sounds/Sfx/buttonClickSfx.mp3';
 import ButtonHoverSFX from '../../assets/Sounds/Sfx/buttonHoverSfx.mp3';

@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
-import { invoke } from '@tauri-apps/api/tauri';
+import { invoke, isTauri } from '@tauri-apps/api/core';
 
 import { JarvisDecision, Level } from '../types/jarvis';
+import { generateDecision } from '../utils/decisionGenerator';
 
 import GameScene from './Scenes/GameScene';
 
@@ -25,8 +26,11 @@ export default function PlayDemoPage() {
     setLoading(true);
     setError(null);
     try {
-      // Tauri commands take named arguments matching the Rust parameter names
-      const result = await invoke<string>('jarvis_decision', { level });
+      // Tauri commands take named arguments matching the Rust parameter names.
+      // Outside Tauri (plain browser) we fall back to the JS mirror of the generator.
+      const result = isTauri()
+        ? await invoke<string>('jarvis_decision', { level })
+        : JSON.stringify(generateDecision(level));
       setDecision(JSON.parse(result) as JarvisDecision);
     } catch (e) {
       console.error('Failed to call jarvis_decision:', e);
