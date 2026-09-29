@@ -1,7 +1,7 @@
 import { JarvisDecision, Level } from '../types/jarvis';
 
 /**
- * Browser fallback that mirrors `src-tauri/src/decision_generator.rs`.
+ * Browser fallback that mirrors src-tauri/src/decision_generator.rs.
  * Used when the app runs in a plain browser instead of the Tauri shell.
  */
 const LEVEL_DATA: Record<Level, JarvisDecision> = {

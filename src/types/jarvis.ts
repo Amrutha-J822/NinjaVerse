@@ -6,7 +6,6 @@ export interface Building {
   height: number;
 }
 
-/** Shape of the JSON returned by the `jarvis_decision` Tauri command. */
 export interface JarvisDecision {
   buildings: Building[];
   villain_energy: number;

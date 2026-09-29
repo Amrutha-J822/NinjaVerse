@@ -5,14 +5,7 @@ import { invoke, isTauri } from '@tauri-apps/api/core';
 
 import { JarvisDecision, Level } from '../types/jarvis';
 import { generateDecision } from '../utils/decisionGenerator';
-
 import GameScene from './Scenes/GameScene';
-
-const levels: { color: string; label: string; value: Level }[] = [
-  { color: 'bg-green-600', label: 'Easy', value: 'easy' },
-  { color: 'bg-orange-500', label: 'Medium', value: 'medium' },
-  { color: 'bg-red-600', label: 'Hard', value: 'hard' }
-];
 
 export default function PlayDemoPage() {
   const navigate = useNavigate();
@@ -86,3 +79,9 @@ export default function PlayDemoPage() {
     </div>
   );
 }
+
+const levels: { color: string; label: string; value: Level }[] = [
+  { color: 'bg-green-600', label: 'Easy', value: 'easy' },
+  { color: 'bg-orange-500', label: 'Medium', value: 'medium' },
+  { color: 'bg-red-600', label: 'Hard', value: 'hard' }
+];
