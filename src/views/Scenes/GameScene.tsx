@@ -1,25 +1,40 @@
-import React, { useEffect, useState, useRef } from 'react';
-
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
-import { JarvisDecision, Level } from '../../types/jarvis';
-
-import { KeyboardControls, OrbitControls } from '@react-three/drei';
-import { Canvas } from '@react-three/fiber';
+import { KeyboardControls } from '@react-three/drei';
+import { Canvas, useFrame } from '@react-three/fiber';
 
 import { ChibiSpiderman, Suit } from '../../components/Characters';
-import { Environment, TimeOfDay } from '../../components/Environment';
+import { buildingTop, Environment, TimeOfDay } from '../../components/Environment';
+import { Venom } from '../../components/Venom';
+import { controlHints, keyMap } from '../../config/controls';
+import { world } from '../../game/world';
+import { JarvisDecision, Level } from '../../types/jarvis';
 import PauseMenu from '../Menus/PauseMenu';
 
-const keyMap = [
-  { name: 'forward', keys: ['w', 'W', 'ArrowUp'] },
-  { name: 'backward', keys: ['s', 'S', 'ArrowDown'] },
-  { name: 'left', keys: ['a', 'A', 'ArrowLeft'] },
-  { name: 'right', keys: ['d', 'D', 'ArrowRight'] },
-  { name: 'jump', keys: [' ', 'ArrowUp'] }
-];
+const gameKeys = new Set(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' ']);
 
-const timeIcons: Record<TimeOfDay, string> = { evening: '🌇', morning: '☀️', night: '🌙' };
+type Platform = { id: number; x: number; height: number; width: number; passed: boolean };
+
+const PLATFORM_WIDTH = 32;
+const SPAWN_HORIZON = 200;
+
+/**
+ * Side-on camera, like a classic 2D beat-'em-up: it follows Spider-Man (including up onto
+ * rooftops) from slightly above, looking straight along the street so the art stays flat.
+ */
+function CameraRig() {
+  useFrame((state, delta) => {
+    const { camera } = state;
+    const p = world.player;
+    const k = 1 - Math.exp(-4 * delta);
+    camera.position.x += (p.x - camera.position.x) * k;
+    camera.position.y += (p.y + 5 - camera.position.y) * k;
+    camera.position.z += (p.z + 14 - camera.position.z) * k;
+    camera.lookAt(camera.position.x, camera.position.y - 2.6, camera.position.z - 14);
+  });
+  return null;
+}
 
 type Props = {
   decision: JarvisDecision;
@@ -33,31 +48,31 @@ export default function GameScene({ decision, level }: Props) {
   const [timeOfDay, setTimeOfDay] = useState<TimeOfDay>('morning');
   const [score, setScore] = useState(0);
   const [gameOver, setGameOver] = useState(false);
+  const webAnchors = useMemo(() => decision.buildings.map(buildingTop), [decision.buildings]);
 
-  // Endless runner platforms (buildings)
-  const [platforms, setPlatforms] = useState<{ id: number; x: number; height: number; width: number; passed: boolean }[]>(() => {
-    const initial: { id: number; x: number; height: number; width: number; passed: boolean }[] = [];
-    // Generate initial buildings from decision
-    decision.buildings.forEach((b) => {
-      initial.push({
-        id: 0,
-        x: b.x * 10,
-        height: b.height,
-        width: 32,
-        passed: false
-      });
-    });
-    return initial;
-  });
-
-  const platformRef = useRef(null);
+  // Endless runner platforms (buildings), seeded from Jarvis's layout.
+  // Kept in a ref, not state, so the 20 updates a second don't re-render the whole scene.
+  // TODO: render platforms in the Canvas (read platforms.current in useFrame) and set gameOver on collision
+  const platforms = useRef<Platform[]>(
+    decision.buildings.map((b, i) => ({
+      height: b.height,
+      id: i,
+      passed: false,
+      width: PLATFORM_WIDTH,
+      x: b.x * 10
+    }))
+  );
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (gameKeys.has(e.key)) {
+        // Stop arrows/space from scrolling the page or pressing a focused HUD button
+        e.preventDefault();
+        (document.activeElement as HTMLElement | null)?.blur();
+      }
       if (e.key === 'Escape') setPaused((p) => !p);
-      if (e.key === 'j' || e.key === 'J') setSuit((s) => (s === 'normal' ? 'jarvis' : 'normal'));
-      // Jump on space or ArrowUp
-      if ((e.key === ' ' || e.key === 'ArrowUp') && !gameOver) {
+      // Each jump scores a point
+      if (e.key === ' ' && !e.repeat && !gameOver) {
         setScore((prev) => prev + 1);
       }
     };
@@ -67,63 +82,55 @@ export default function GameScene({ decision, level }: Props) {
 
   // Generate new platforms continuously
   useEffect(() => {
-    if (gameOver) return;
+    if (gameOver) return undefined;
 
     const spawnPlatform = setInterval(() => {
-      const lastPlatform = platforms[platforms.length - 1];
-      const newX = lastPlatform.x + 20 + Math.random() * 20;
-      const newHeight = 8 + Math.floor(Math.random() * 12);
-      
-      setPlatforms((prev) => [
-        ...prev,
-        {
-          id: Date.now(),
-          x: newX,
-          height: newHeight,
-          width: 32,
-          passed: false
-        }
-      ]);
+      const prev = platforms.current;
+      const lastX = prev.length ? prev[prev.length - 1].x : 0;
+      // Only keep a limited stretch of city ahead of the player
+      if (lastX > SPAWN_HORIZON) return;
+      prev.push({
+        height: 8 + Math.floor(Math.random() * 12),
+        id: Date.now(),
+        passed: false,
+        width: PLATFORM_WIDTH,
+        x: lastX + 20 + Math.random() * 20
+      });
     }, 1000);
 
     return () => clearInterval(spawnPlatform);
-  }, [platforms, gameOver]);
+  }, [gameOver]);
 
-  // Check collisions and remove off-screen platforms
+  // Scroll platforms toward the player and remove the ones that went off screen
   useEffect(() => {
-    if (gameOver) return;
+    if (gameOver) return undefined;
 
-    const checkCollisions = setInterval(() => {
-      const playerY = 0; // Simplified - would check actual position
-      
-      setPlatforms((prev) => prev.map((platform) => {
-        // Check if platform went off screen (passed player)
-        if (platform.x + platform.width < 0) {
-          // Check if player jumped over it
-          const wasPassed = !platform.passed;
-          return { ...platform, passed: true, x: platform.x - 20 };
-        }
-        return platform;
-      }));
+    const scroll = setInterval(() => {
+      platforms.current = platforms.current
+        .map((platform) => ({ ...platform, passed: platform.passed || platform.x < 0, x: platform.x - 1 }))
+        .filter((platform) => platform.x + platform.width >= 0);
     }, 50);
 
-    return () => clearInterval(checkCollisions);
+    return () => clearInterval(scroll);
   }, [gameOver]);
 
   if (gameOver) {
     return (
-      <div className="relative min-h-screen w-screen bg-black flex flex-col items-center justify-center">
-        <div className="bg-black/80 p-8 rounded-lg text-center text-white">
-          <div className="text-4xl font-bold mb-4">GAME OVER</div>
-          <div className="text-2xl mb-2">Score: {score}</div>
+      <div className="relative flex min-h-screen w-screen flex-col items-center justify-center bg-black font-pixel">
+        <div className="border-4 border-white bg-black p-8 text-center text-white">
+          <div className="mb-6 text-2xl text-red-500">GAME OVER</div>
+          <div className="mb-4 text-sm">Score: {score}</div>
           <button
-            className="mt-4 px-6 py-2 bg-teal-600 text-white rounded"
-            onClick={() => setGameOver(false)}
+            className="mt-4 block w-full border-2 border-white bg-teal-700 px-6 py-3 text-xs text-white"
+            onClick={() => {
+              setScore(0);
+              setGameOver(false);
+            }}
           >
             Restart
           </button>
           <button
-            className="mt-2 px-6 py-2 bg-gray-600 text-white rounded"
+            className="mt-2 block w-full border-2 border-white bg-gray-700 px-6 py-3 text-xs text-white"
             onClick={() => navigate('/main-menu')}
           >
             Main Menu
@@ -136,22 +143,27 @@ export default function GameScene({ decision, level }: Props) {
   return (
     <div className="relative h-screen w-screen bg-black overflow-hidden">
       <KeyboardControls map={keyMap}>
-        <Canvas camera={{ fov: 50, position: [0, 8, 18] }}>
-          <Environment timeOfDay={timeOfDay} 
-            buildings={decision.buildings} 
-            dangerZones={decision.danger_zone} />
-          <ChibiSpiderman suit={suit} position={[0, 0, 6]} />
-          <OrbitControls target={[0, 2, 0]} maxPolarAngle={Math.PI / 2.1} />
+        <Canvas camera={{ fov: 50, position: [0, 5, 20] }}>
+          <Environment timeOfDay={timeOfDay} buildings={decision.buildings} dangerZones={decision.danger_zone} />
+          <ChibiSpiderman suit={suit} position={[0, 0, 6]} webAnchors={webAnchors} />
+          {/* Venom only shows up on the hard level */}
+          {level === 'hard' && <Venom start={[14, 0, 6]} />}
+          <CameraRig />
         </Canvas>
       </KeyboardControls>
 
       {/* Arcade HUD */}
-      <div className="pointer-events-none fixed top-2 left-2 bg-black/80 backdrop-blur-sm p-3 rounded text-white text-sm font-mono">
+      <div className="pointer-events-none fixed left-2 top-2 border-2 border-white bg-black/80 p-3 font-pixel text-[10px] leading-5 text-white">
         <div className="flex items-center gap-2">
           <div>Score: {score}</div>
         </div>
         <div className="mt-1 flex items-center gap-2">
           <div>Level: {level}</div>
+        </div>
+        <div className="mt-2 text-[8px] leading-4 text-white/60">
+          {controlHints.map((hint) => (
+            <div key={hint}>{hint}</div>
+          ))}
         </div>
       </div>
 
@@ -162,7 +174,9 @@ export default function GameScene({ decision, level }: Props) {
             key={s}
             type="button"
             onClick={() => setSuit(s)}
-            className={`rounded px-3 py-1 font-mono text-sm text-white ${suit === s ? 'bg-red-700' : 'bg-black/60'}`}
+            className={`border-2 border-black px-3 py-2 font-pixel text-[10px] text-white ${
+              suit === s ? 'bg-red-700' : 'bg-black/60'
+            }`}
           >
             {s === 'normal' ? 'Normal' : 'Jarvis'}
           </button>
@@ -172,7 +186,7 @@ export default function GameScene({ decision, level }: Props) {
             key={t}
             type="button"
             onClick={() => setTimeOfDay(t)}
-            className={`rounded px-3 py-1 font-mono text-sm capitalize text-white ${
+            className={`border-2 border-black px-3 py-2 font-pixel text-[10px] capitalize text-white ${
               timeOfDay === t ? 'bg-teal-700' : 'bg-black/60'
             }`}
           >

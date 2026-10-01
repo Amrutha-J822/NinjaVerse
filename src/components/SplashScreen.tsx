@@ -1,7 +1,6 @@
 import React, { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 
-import SplashLogo from '../assets/darkramlogoreal.png';
 import SplashOpeningSFX from '../assets/Sounds/Sfx/splashOpening.mp3';
 
 function SplashScreen() {
@@ -32,9 +31,8 @@ function SplashScreen() {
 
   return (
     <div className="grid h-screen place-items-center bg-gradient-to-r from-slate-950 from-10% via-teal-950 via-50% to-slate-900 to-90%">
-      <div className="grid place-items-center" style={{ gridTemplateRows: '1fr 0.2fr' }}>
-        <img src={SplashLogo} className="w-96 animate-pulse" alt="" />
-      </div>
+      {/* Pixel-font title */}
+      <h1 className="animate-pulse font-pixel text-4xl text-red-600 [text-shadow:4px_4px_0_#000]">SPIDEYVERSE</h1>
     </div>
   );
 }
