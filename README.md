@@ -1,49 +1,64 @@
-# tauri-react-threefiber-vite
+# SpideyVerse
 
-<img src="https://raw.githubusercontent.com/Darkksideyoda/Darkksideyoda.github.io/master/Urlimages/Screenshot%202023-04-23%20at%2003.34.11%202%20(2).png" w="40" h="40"/>
+A pixel art Spider-Man game for the desktop. Pick a level, swing across the city on your webs, land on rooftops and fight Venom on the hard level. A helper called Jarvis builds the city layout for each level.
 
-This is a desktop 3D boilerplate starter template project developed with Tauri and React. The project is configured with Vite and includes extra packages such as Tailwind CSS for styling, useSound for controlling audio, Prettier and ESLint for code formatting and linting, Zustand for global state management, and Framer Motion for simple animations.
+![Splash screen](assets/splash-screen.webp)
 
-## Getting Started
+## Screenshots
 
-To get started with this project, simply clone the repository:
-```console
-git clone https://github.com/Darkksideyoda/tauri-react-threefiber-vite.git
-```
-and run the following command in the project directory
+| Main menu | Level select |
+| --- | --- |
+| ![Main menu](assets/main-menu.webp) | ![Level select](assets/level-select.webp) |
+
+**Fighting Venom on the hard level**
+
+![Spider-Man fighting Venom](assets/venom-fight.webp)
+
+**Jarvis suit on a rooftop**
+
+![Jarvis suit on a rooftop](assets/jarvis-suit-rooftop.webp)
+
+## Controls
+
+| Action | Right hand | Left hand |
+| --- | --- | --- |
+| Move | Arrow keys | Arrow keys |
+| Jump | Space | Space |
+| Punch | J | Z |
+| High kick | K | X |
+| Slide kick | Down + X + Left or Right | Down + S + Left or Right |
+| Web shot | V | V |
+| Web swing | V + Space | V + Space |
+| Pause | Esc | Esc |
+
+## Tech stack
+
+**Frontend**
+- React and TypeScript for the screens and game logic
+- Vite to run and build the app
+- Tailwind CSS for styling
+- React Router to move between screens
+- Framer Motion for menu fades
+- use-sound for button sounds
+
+**Game**
+- Three.js with React Three Fiber to draw the game world
+- Drei for keyboard controls
+
+**Pixel art**
+- Python with Pillow to turn pictures into pixel sprites and to draw every animation frame
+- HTML canvas to paint the sprites, buildings and street as crisp pixel textures
+- Press Start 2P pixel font
+
+**Backend**
+- Rust with Tauri 2 to run the game as a desktop app
+- A small Rust level generator (Jarvis) that picks the buildings, villain energy and attack for each level
+
+## Run it
+
+You need Node.js and Rust installed.
+
 ```console
 npm install
-```
-After that, run the following command to start the development server:
-
-```console
 npm run tauri dev
 ```
-
-Please note that the first run may be slow, but subsequent runs will be faster.
-
-> **Note**
-> After saying Play Demo, the ESC key becomes active. In this way, you can return to the main Menu again.
-
-## Packages Included
-
-The following packages are included in this boilerplate template:
-
-- React Three Fiber
-- React Three Drei
-- Tailwind CSS
-- useSound
-- Prettier
-- ESLint
-- Zustand
-- Framer Motion
-
-> :warning: Update the configuration settings in the `src-tauri/tauri.conf.json` file according to your needs.
-
-## Contributing
-
-Contributions to this project are welcome. If you notice any issues or have any suggestions, please open an issue or a pull request.
-
-## License
-
-This project is licensed under the MIT License. See the LICENSE file for more information.
