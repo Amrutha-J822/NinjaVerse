@@ -29,7 +29,7 @@ function ButtonSfx(props: Props) {
       onMouseEnter={() => playHoverSfx()}
       onMouseLeave={() => stopHoverSfx()}
       onClick={handleOnClick}
-      className="rounded-lg hover:text-gray-500/50 font-main_menu text-5xl text-white/60 py-2"
+      className="py-3 text-left font-pixel text-xl text-white/70 hover:text-red-500"
     >
       {buttonLabel}
     </button>
