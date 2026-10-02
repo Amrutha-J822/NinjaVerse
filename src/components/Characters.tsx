@@ -186,7 +186,8 @@ export function ChibiSpiderman({ position, suit, webAnchors }: CharacterProps) {
         body.position.x += dx * step;
         body.position.z += dz * step;
       }
-      if (dx !== 0 && !sliding) facing.current = dx;
+      // Always update facing direction based on horizontal movement
+      facing.current = dx !== 0 ? dx : facing.current;
 
       // Attacks fire the instant their key is pressed; a new attack cuts off the previous one
       const start = (type: Exclude<Action, 'idle'>) => {
@@ -337,11 +338,11 @@ export function ChibiSpiderman({ position, suit, webAnchors }: CharacterProps) {
     }
   });
 
-  // Wings are out while he has enough charge to fly
+// Wings are out while he has enough charge to fly
   const flying = !isCharging && chargeLevel >= 50;
   const sprite = suitSprites[suit][look.view];
-  // Flip the art so he faces the way he is going (symmetric art is never flipped)
-  const mirror = sprite.faces && look.facing !== sprite.faces ? -1 : 1;
+/** Mirror: -1 when facing left, 1 when facing right or standing */
+const mirror = facing.current < 0 ? -1 : 1;
 
   return (
     <>

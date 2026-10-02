@@ -10,6 +10,7 @@
     "tauri": "tauri"
   },
   "dependencies": {
+    "@mlc-ai/web-llm": "^0.2.85",
     "@react-three/drei": "^9.65.5",
     "@react-three/fiber": "^8.12.2",
     "@tauri-apps/api": "^2.12.0",
