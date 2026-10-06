@@ -1,200 +1,138 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useEffect, useRef, useState } from 'react';
 
 import { KeyboardControls } from '@react-three/drei';
-import { Canvas, useFrame } from '@react-three/fiber';
+import { Canvas, useFrame, useThree } from '@react-three/fiber';
 
-import { ChibiSpiderman, Suit } from '../../components/Characters';
-import { buildingTop, Environment, TimeOfDay } from '../../components/Environment';
-import { Venom } from '../../components/Venom';
-import { controlHints, keyMap } from '../../config/controls';
-import { world } from '../../game/world';
-import { JarvisDecision, Level } from '../../types/jarvis';
+import { FireBreath, FlameTrail } from '../../components/Effects';
+import { EmberChat } from '../../components/EmberChat';
+import { Environment } from '../../components/Environment';
+import { Fireball } from '../../components/Fireball';
+import { Ninja } from '../../components/Ninja';
+import { keyMap } from '../../config/controls';
+import { autoAssist } from '../../game/ember';
+import { checkHints, resetHints } from '../../game/hints';
+import { FINISH_X, LEVEL_WIDTH, resetLevel, VINE_WALL, vineWallBase } from '../../game/level';
+import { resetWorld, world } from '../../game/world';
 import PauseMenu from '../Menus/PauseMenu';
 
-const gameKeys = new Set(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' ']);
-
-type Platform = { id: number; x: number; height: number; width: number; passed: boolean };
-
-const PLATFORM_WIDTH = 32;
-const SPAWN_HORIZON = 200;
+const gameKeys = new Set(['ArrowLeft', 'ArrowRight', 'ArrowUp']);
+const VIEW_HEIGHT = 7; // world units visible top to bottom (the art's own scale)
 
 /**
- * Side-on camera, like a classic 2D beat-'em-up: it follows Spider-Man (including up onto
- * rooftops) from slightly above, looking straight along the street so the art stays flat.
+ * Flat 2D camera that follows the ninja along the level and up onto higher
+ * platforms, without showing past either end of the level.
  */
 function CameraRig() {
-  useFrame((state, delta) => {
-    const { camera } = state;
-    const p = world.player;
-    const k = 1 - Math.exp(-4 * delta);
-    camera.position.x += (p.x - camera.position.x) * k;
-    camera.position.y += (p.y + 5 - camera.position.y) * k;
-    camera.position.z += (p.z + 14 - camera.position.z) * k;
-    camera.lookAt(camera.position.x, camera.position.y - 2.6, camera.position.z - 14);
+  const { camera, size } = useThree();
+  const placed = useRef(false);
+  useEffect(() => {
+    const ortho = camera as unknown as { zoom: number; updateProjectionMatrix: () => void };
+    ortho.zoom = size.height / VIEW_HEIGHT;
+    ortho.updateProjectionMatrix();
+  }, [camera, size]);
+
+  useFrame((_, delta) => {
+    const halfW = size.width / (size.height / VIEW_HEIGHT) / 2;
+    const k = placed.current ? 1 - Math.exp(-5 * delta) : 1; // start in place, then follow smoothly
+    placed.current = true;
+    const targetX = Math.min(Math.max(world.player.x, halfW), Math.max(halfW, LEVEL_WIDTH - halfW));
+    const targetY = world.player.y + 1.2;
+    camera.position.x += (targetX - camera.position.x) * k;
+    camera.position.y += (targetY - camera.position.y) * k;
   });
   return null;
 }
 
-type Props = {
-  decision: JarvisDecision;
-  level: Level;
-};
+/** Runs the game clock, which stops while paused or talking to Ember. */
+function GameClock() {
+  useFrame((_, delta) => {
+    if (!world.paused) world.time += Math.min(delta, 1 / 30);
+  });
+  return null;
+}
 
-export default function GameScene({ decision, level }: Props) {
-  const navigate = useNavigate();
+/** Lets Ember call out each challenge as the ninja reaches it, and step in to help. */
+function HintWatcher() {
+  useFrame(() => {
+    if (world.paused) return;
+    checkHints();
+    autoAssist();
+  });
+  return null;
+}
+
+/** Tells the page once the ninja reaches the far rooftop. */
+function FinishWatcher({ onFinish }: { onFinish: () => void }) {
+  const done = useRef(false);
+  useFrame(() => {
+    if (!done.current && world.player.x >= FINISH_X) {
+      done.current = true;
+      onFinish();
+    }
+  });
+  return null;
+}
+
+export default function GameScene() {
   const [paused, setPaused] = useState(false);
-  const [suit, setSuit] = useState<Suit>('normal');
-  const [timeOfDay, setTimeOfDay] = useState<TimeOfDay>('morning');
-  const [score, setScore] = useState(0);
-  const [gameOver, setGameOver] = useState(false);
-  const webAnchors = useMemo(() => decision.buildings.map(buildingTop), [decision.buildings]);
+  const [finished, setFinished] = useState(false);
+  const [chatting, setChatting] = useState(false);
 
-  // Endless runner platforms (buildings), seeded from Jarvis's layout.
-  // Kept in a ref, not state, so the 20 updates a second don't re-render the whole scene.
-  // TODO: render platforms in the Canvas (read platforms.current in useFrame) and set gameOver on collision
-  const platforms = useRef<Platform[]>(
-    decision.buildings.map((b, i) => ({
-      height: b.height,
-      id: i,
-      passed: false,
-      width: PLATFORM_WIDTH,
-      x: b.x * 10
-    }))
-  );
-
+  // Every game starts fresh: falling blocks back in place, Ember's abilities ready
   useEffect(() => {
+    resetLevel();
+    resetWorld();
+    resetHints();
+  }, []);
+
+  // The world stands still while the pause menu or the chat is open
+  useEffect(() => {
+    world.paused = paused || chatting;
+  }, [paused, chatting]);
+
+  // Keys while playing (the chat box handles its own keys while it is open)
+  useEffect(() => {
+    if (chatting) return undefined;
     const handleKeyDown = (e: KeyboardEvent) => {
       if (gameKeys.has(e.key)) {
-        // Stop arrows/space from scrolling the page or pressing a focused HUD button
+        // Stop the arrows from scrolling the page or pressing a focused button
         e.preventDefault();
         (document.activeElement as HTMLElement | null)?.blur();
       }
       if (e.key === 'Escape') setPaused((p) => !p);
-      // Each jump scores a point
-      if (e.key === ' ' && !e.repeat && !gameOver) {
-        setScore((prev) => prev + 1);
+      if ((e.key === 't' || e.key === 'T') && !paused) {
+        e.preventDefault(); // don't type the T into the chat box
+        setChatting(true);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [gameOver]);
-
-  // Generate new platforms continuously
-  useEffect(() => {
-    if (gameOver) return undefined;
-
-    const spawnPlatform = setInterval(() => {
-      const prev = platforms.current;
-      const lastX = prev.length ? prev[prev.length - 1].x : 0;
-      // Only keep a limited stretch of city ahead of the player
-      if (lastX > SPAWN_HORIZON) return;
-      prev.push({
-        height: 8 + Math.floor(Math.random() * 12),
-        id: Date.now(),
-        passed: false,
-        width: PLATFORM_WIDTH,
-        x: lastX + 20 + Math.random() * 20
-      });
-    }, 1000);
-
-    return () => clearInterval(spawnPlatform);
-  }, [gameOver]);
-
-  // Scroll platforms toward the player and remove the ones that went off screen
-  useEffect(() => {
-    if (gameOver) return undefined;
-
-    const scroll = setInterval(() => {
-      platforms.current = platforms.current
-        .map((platform) => ({ ...platform, passed: platform.passed || platform.x < 0, x: platform.x - 1 }))
-        .filter((platform) => platform.x + platform.width >= 0);
-    }, 50);
-
-    return () => clearInterval(scroll);
-  }, [gameOver]);
-
-  if (gameOver) {
-    return (
-      <div className="relative flex min-h-screen w-screen flex-col items-center justify-center bg-black font-pixel">
-        <div className="border-4 border-white bg-black p-8 text-center text-white">
-          <div className="mb-6 text-2xl text-red-500">GAME OVER</div>
-          <div className="mb-4 text-sm">Score: {score}</div>
-          <button
-            className="mt-4 block w-full border-2 border-white bg-teal-700 px-6 py-3 text-xs text-white"
-            onClick={() => {
-              setScore(0);
-              setGameOver(false);
-            }}
-          >
-            Restart
-          </button>
-          <button
-            className="mt-2 block w-full border-2 border-white bg-gray-700 px-6 py-3 text-xs text-white"
-            onClick={() => navigate('/main-menu')}
-          >
-            Main Menu
-          </button>
-        </div>
-      </div>
-    );
-  }
+  }, [chatting, paused]);
 
   return (
-    <div className="relative h-screen w-screen bg-black overflow-hidden">
+    <div className="relative h-screen w-screen overflow-hidden bg-black">
       <KeyboardControls map={keyMap}>
-        <Canvas camera={{ fov: 50, position: [0, 5, 20] }}>
-          <Environment timeOfDay={timeOfDay} buildings={decision.buildings} dangerZones={decision.danger_zone} />
-          <ChibiSpiderman suit={suit} position={[0, 0, 6]} webAnchors={webAnchors} />
-          {/* Venom only shows up on the hard level */}
-          {level === 'hard' && <Venom start={[14, 0, 6]} />}
+        {/* rotation set so the camera faces straight ahead (by default it would turn toward the origin) */}
+        <Canvas orthographic camera={{ position: [3, 1.2, 100], rotation: [0, 0, 0], zoom: 100 }}>
+          <GameClock />
+          <Environment />
+          <FlameTrail />
+          <Fireball />
+          <FireBreath target={[VINE_WALL.x + VINE_WALL.width / 2, vineWallBase() + VINE_WALL.height * 0.45]} />
+          <Ninja />
           <CameraRig />
+          <HintWatcher />
+          <FinishWatcher onFinish={() => setFinished(true)} />
         </Canvas>
       </KeyboardControls>
 
-      {/* Arcade HUD */}
-      <div className="pointer-events-none fixed left-2 top-2 border-2 border-white bg-black/80 p-3 font-pixel text-[10px] leading-5 text-white">
-        <div className="flex items-center gap-2">
-          <div>Score: {score}</div>
+      {finished && (
+        <div className="pointer-events-none fixed left-1/2 top-16 -translate-x-1/2 border-2 border-white bg-black/70 px-6 py-4 font-pixel text-xs text-amber-300">
+          You crossed the city!
         </div>
-        <div className="mt-1 flex items-center gap-2">
-          <div>Level: {level}</div>
-        </div>
-        <div className="mt-2 text-[8px] leading-4 text-white/60">
-          {controlHints.map((hint) => (
-            <div key={hint}>{hint}</div>
-          ))}
-        </div>
-      </div>
+      )}
 
-      {/* Controls */}
-      <div className="absolute bottom-4 left-1/2 flex -translate-x-1/2 gap-2">
-        {(['normal', 'jarvis'] as Suit[]).map((s) => (
-          <button
-            key={s}
-            type="button"
-            onClick={() => setSuit(s)}
-            className={`border-2 border-black px-3 py-2 font-pixel text-[10px] text-white ${
-              suit === s ? 'bg-red-700' : 'bg-black/60'
-            }`}
-          >
-            {s === 'normal' ? 'Normal' : 'Jarvis'}
-          </button>
-        ))}
-        {(['morning', 'evening', 'night'] as TimeOfDay[]).map((t) => (
-          <button
-            key={t}
-            type="button"
-            onClick={() => setTimeOfDay(t)}
-            className={`border-2 border-black px-3 py-2 font-pixel text-[10px] capitalize text-white ${
-              timeOfDay === t ? 'bg-teal-700' : 'bg-black/60'
-            }`}
-          >
-            {t}
-          </button>
-        ))}
-      </div>
-
+      {chatting && <EmberChat onClose={() => setChatting(false)} />}
       {paused && <PauseMenu onCloseMenu={() => setPaused(false)} />}
     </div>
   );
