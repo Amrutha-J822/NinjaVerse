@@ -1,4 +1,4 @@
-import React, { useRef, useState } from "react";
+import React, { useRef, useState, useEffect, createContext } from "react";
 import {
   CreateMLCEngine,
   type MLCEngineInterface,
@@ -16,9 +16,9 @@ const appConfig = {
   model_list: [
     {
       model: new URL(
-  "/mlc/nemotron-mini-4b-q4f16_1",
-  window.location.origin
-).toString(),
+        "/mlc/nemotron-mini-4b-q4f16_1",
+        window.location.origin
+      ).toString(),
       model_id: MODEL_ID,
       model_lib: MODEL_WASM,
 
@@ -32,6 +32,22 @@ const appConfig = {
   ],
 };
 
+export const NemotronContext = createContext<{
+  engine: MLCEngineInterface | null;
+  status: string;
+  progress: string;
+  progressPercent: number;
+  loading: boolean;
+  generating: boolean;
+}>({
+  engine: null,
+  status: 'Model not loaded',
+  progress: '',
+  progressPercent: 0,
+  loading: false,
+  generating: false,
+});
+
 type Message = {
   role: "user" | "assistant";
   content: string;
@@ -42,6 +58,7 @@ export default function NemotronChat() {
 
   const [status, setStatus] = useState("Model not loaded");
   const [progress, setProgress] = useState("");
+  const [progressPercent, setProgressPercent] = useState(0);
 
   const [messages, setMessages] = useState<Message[]>([]);
 
@@ -49,6 +66,26 @@ export default function NemotronChat() {
 
   const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const [gameActive, setGameActive] = useState(false);
+  const gameIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const [currentCombo, setCurrentCombo] = useState<string>("");
+
+  // ------------------------------------------------------------
+  // AUTO LOAD MODEL & GAME LOOP
+  // ------------------------------------------------------------
+
+  useEffect(() => {
+    // Auto‑load model on mount
+    void initialize();
+
+    return () => {
+      // Cleanup interval on unmount
+      if (gameIntervalRef.current) {
+        clearInterval(gameIntervalRef.current);
+        gameIntervalRef.current = null;
+      }
+    };
+  }, []);
 
   // ------------------------------------------------------------
   // LOAD MODEL
@@ -81,6 +118,9 @@ export default function NemotronChat() {
                   : ""
               }`
             );
+            if (report.progress !== undefined) {
+              setProgressPercent(Math.round(report.progress * 100));
+            }
           },
         }
       );
@@ -91,6 +131,12 @@ export default function NemotronChat() {
       setProgress("Nemotron is ready.");
 
       console.log("Nemotron engine initialized:", engine);
+
+      // Start game loop once model is ready
+      setGameActive(true);
+      gameIntervalRef.current = setInterval(() => {
+        void sendGamePrompt();
+      }, 3000); // every 3 seconds
     } catch (error) {
       console.error(error);
 
@@ -107,7 +153,7 @@ export default function NemotronChat() {
   };
 
   // ------------------------------------------------------------
-  // SEND MESSAGE
+  // SEND MESSAGE (chat)
   // ------------------------------------------------------------
 
   const sendMessage = async () => {
@@ -211,6 +257,51 @@ export default function NemotronChat() {
       ]);
     } finally {
       setGenerating(false);
+    }
+  };
+
+  // ------------------------------------------------------------
+  // SEND GAME PROMPT (non‑chat)
+  // ------------------------------------------------------------
+
+  const sendGamePrompt = async () => {
+    const engine = engineRef.current;
+    if (!engine) return;
+
+    // Ask model for a simple key combo
+    const prompt = "Give me a single key combo for a Spider‑Man game, e.g. ArrowUp,ArrowRight,Space. Reply with only the combo.";
+
+    try {
+      const stream =
+        await engine.chat.completions.create({
+          messages: [{ role: "user", content: prompt }],
+          temperature: 0.2,
+          top_p: 0.9,
+          max_tokens: 64,
+          stream: true,
+        });
+
+      let combo = "";
+      for await (const chunk of stream) {
+        const delta =
+          chunk.choices?.[0]?.delta?.content ?? "";
+        combo += delta;
+      }
+
+      combo = combo.trim();
+      if (combo) {
+        // In a real game we would dispatch key events here.
+        console.log("Received key combo:", combo);
+        // Optionally show in UI
+        setStatus(`Executing: ${combo}`);
+        // Simulate execution delay
+        setTimeout(() => {
+          setStatus("Ready");
+        }, 1000);
+      }
+    } catch (err) {
+      console.error("Game prompt error:", err);
+      setStatus("Game prompt failed");
     }
   };
 
@@ -466,8 +557,8 @@ export default function NemotronChat() {
                     (generating &&
                     message.role ===
                       "assistant"
-                      ? "..."
-                      : "")}
+                        ? "..."
+                        : "")}
                 </div>
               </div>
             )

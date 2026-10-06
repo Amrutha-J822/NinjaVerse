@@ -10,9 +10,13 @@ import { Venom } from '../../components/Venom';
 import { controlHints, keyMap } from '../../config/controls';
 import { world } from '../../game/world';
 import { JarvisDecision, Level } from '../../types/jarvis';
+import { isNemotronReady, getAIAction, dispatchAIAction } from '../../utils/nemotronAI';
 import PauseMenu from '../Menus/PauseMenu';
 
 const gameKeys = new Set(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' ']);
+
+// AI control state
+const AI_CONTROL_TOGGLE_KEY = 'KeyA'; // Press 'A' to toggle AI control
 
 type Platform = { id: number; x: number; height: number; width: number; passed: boolean };
 
@@ -48,6 +52,8 @@ export default function GameScene({ decision, level }: Props) {
   const [timeOfDay, setTimeOfDay] = useState<TimeOfDay>('morning');
   const [score, setScore] = useState(0);
   const [gameOver, setGameOver] = useState(false);
+  const [aiEnabled, setAIEnabled] = useState(false);
+  const [aiSource, setAISource] = useState<'nemotron-webgpu' | 'fallback-rules'>('fallback-rules');
   const webAnchors = useMemo(() => decision.buildings.map(buildingTop), [decision.buildings]);
 
   // Endless runner platforms (buildings), seeded from Jarvis's layout.
@@ -64,7 +70,22 @@ export default function GameScene({ decision, level }: Props) {
   );
 
   useEffect(() => {
+    // Toggle AI control with 'A' key
+    const toggleAI = (e: KeyboardEvent) => {
+      if (e.key === AI_CONTROL_TOGGLE_KEY) {
+        setAIEnabled((p) => !p);
+        setAISource(prev => prev === 'nemotron-webgpu' ? 'fallback-rules' : 'nemotron-webgpu');
+        console.log(`AI control ${aiEnabled ? 'disabled' : 'enabled'} (source: ${setAISource(prev => prev === 'nemotron-webgpu' ? 'fallback-rules' : 'nemotron-webgpu')})`);
+      }
+    };
+
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Toggle AI control first
+      if (e.key === AI_CONTROL_TOGGLE_KEY) {
+        e.preventDefault();
+        return;
+      }
+
       if (gameKeys.has(e.key)) {
         // Stop arrows/space from scrolling the page or pressing a focused HUD button
         e.preventDefault();
@@ -76,9 +97,14 @@ export default function GameScene({ decision, level }: Props) {
         setScore((prev) => prev + 1);
       }
     };
+
+    window.addEventListener('keydown', toggleAI);
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [gameOver]);
+    return () => {
+      window.removeEventListener('keydown', toggleAI);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [gameOver, aiEnabled]);
 
   // Generate new platforms continuously
   useEffect(() => {
@@ -100,6 +126,42 @@ export default function GameScene({ decision, level }: Props) {
 
     return () => clearInterval(spawnPlatform);
   }, [gameOver]);
+
+  // AI-controlled actions loop
+  useEffect(() => {
+    if (!aiEnabled || paused || gameOver) return undefined;
+
+    const aiInterval = setInterval(async () => {
+      // Get current game state for AI decision
+      const dangerZones = decision.danger_zone;
+      const buildings = decision.buildings;
+
+      const gameState = {
+        level,
+        villain_energy: decision.villain_energy,
+        attack: decision.attack,
+        timeOfDay,
+        suit,
+        buildings,
+        danger_zone: dangerZones
+      };
+
+      try {
+        const { action, source, confidence } = await getAIAction(gameState, gameOver);
+        setAISource(source);
+        // Note: dispatchAIAction is already called inside getAIAction
+        // but we log the action here for debugging
+        if (process.env.NODE_ENV === 'development') {
+          console.log(`AI Action: ${action} (${source}, confidence: ${confidence.toFixed(2)})`);
+        }
+      } catch (error) {
+        console.error('AI action error:', error);
+        setAISource('fallback-rules');
+      }
+    }, 100); // Call every 100ms (~10 decisions per second)
+
+    return () => clearInterval(aiInterval);
+  }, [aiEnabled, paused, gameOver, level, suit, timeOfDay, decision]);
 
   // Scroll platforms toward the player and remove the ones that went off screen
   useEffect(() => {
@@ -156,6 +218,9 @@ export default function GameScene({ decision, level }: Props) {
       <div className="pointer-events-none fixed left-2 top-2 border-2 border-white bg-black/80 p-3 font-pixel text-[10px] leading-5 text-white">
         <div className="flex items-center gap-2">
           <div>Score: {score}</div>
+          {aiEnabled && (
+            <div className="text-yellow-400 text-[8px] ml-2">AI: {aiSource}</div>
+          )}
         </div>
         <div className="mt-1 flex items-center gap-2">
           <div>Level: {level}</div>
@@ -193,6 +258,16 @@ export default function GameScene({ decision, level }: Props) {
             {t}
           </button>
         ))}
+        {/* AI Toggle Button */}
+        <button
+          onClick={() => setAIEnabled((p) => !p)}
+          disabled={!isNemotronReady()}
+          className={`border-2 border-black px-3 py-2 font-pixel text-[10px] text-white ${
+            aiEnabled ? 'bg-green-600' : 'bg-black/60'
+          }`}
+          title="Press 'A' key to toggle AI control (or click this button)">
+          {aiEnabled ? 'AI ON' : 'AI OFF'}
+        </button>
       </div>
 
       {paused && <PauseMenu onCloseMenu={() => setPaused(false)} />}

@@ -44,8 +44,64 @@ export async function initNemotronModel(): Promise<boolean> {
 }
 
 /**
+ * Map AI action to game key event.
+ * This translates Nemotron's decision text to actual keyboard events
+ * that the game engine understands.
+ * @param action The AI action string
+ * @param gameOver Whether the game is over (affects jump key behavior)
+ * @returns The mapped key configuration
+ */
+const getActionMapping = (
+  action: 'move_left' | 'move_right' | 'move_idle' | 'jump' | 'switch_suit' | 'wait',
+  gameOver: boolean
+): { key: string; preventDefault: (e: KeyboardEvent) => boolean } | undefined => {
+  const baseMapping: Record<string, { key: string; preventDefault: (e: KeyboardEvent) => boolean }> = {
+    move_left: { key: 'ArrowLeft', preventDefault: () => true },
+    move_right: { key: 'ArrowRight', preventDefault: () => true },
+    move_idle: { key: '', preventDefault: () => false },
+    jump: { key: ' ', preventDefault: e => !e.repeat && !gameOver },
+    switch_suit: { key: 's', preventDefault: () => true },
+    wait: { key: '', preventDefault: () => false }
+  };
+  return baseMapping[action];
+};
+
+/**
+ * Dispatch a keyboard event for the given action.
+ * @param action The AI action string
+ * @param gameOver Whether the game is over (for jump logic)
+ */
+export const dispatchAIAction = (
+  action: 'move_left' | 'move_right' | 'move_idle' | 'jump' | 'switch_suit' | 'wait',
+  gameOver: boolean
+): void => {
+  const mapped = getActionMapping(action, gameOver);
+  if (!mapped) return;
+
+  if (mapped.key && !gameOver) {
+    const event = new KeyboardEvent('keydown', {
+      key: mapped.key,
+      bubbles: true,
+      cancelable: true
+    });
+    // Prevent default for key presses
+    if (mapped.preventDefault) {
+      // Prevent default for all key presses
+      // The jump repeat handling is managed by the game's key listener
+      event.preventDefault();
+    }
+    window.dispatchEvent(event);
+  } else if (mapped.key === '') {
+    // move_idle or wait - just ensure no key is pressed
+    const upEvent = new KeyboardEvent('keyup', { key: mapped.key, bubbles: true });
+    window.dispatchEvent(upEvent);
+  }
+};
+
+/**
  * Get an AI decision for the current game state.
  * @param gameState – current state of the game
+ * @param gameOver – whether the game is currently over
  * @returns {Promise<{action, source, confidence}>}
  */
 export async function getAIAction(
@@ -57,7 +113,8 @@ export async function getAIAction(
     suit: string;
     buildings: Array<{ x: number; y: number; height: number }>;
     danger_zone: Array<[number, number, number]>;
-  }
+  },
+  gameOver: boolean = false
 ): Promise<{
   action: 'move_left' | 'move_right' | 'move_idle' | 'jump' | 'switch_suit' | 'wait';
   source: 'nemotron-webgpu' | 'fallback-rules';
@@ -65,7 +122,12 @@ export async function getAIAction(
 }> {
   if (!isModelLoaded || !engine) {
     // Fallback to existing decision generator
-    return fallbackDecision(gameState);
+    const fallbackAction = await fallbackDecision(gameState);
+    // Still dispatch the fallback action if we have gameOver context
+    if (gameOver) {
+      dispatchAIAction(fallbackAction.action, true);
+    }
+    return fallbackAction;
   }
 
   try {
@@ -85,16 +147,15 @@ export async function getAIAction(
       ACTION REQUIRED:
       Based on the state above, decide the next action for Spider-Man.
       
-      Output format (choose ONE):
-      - "move_left": Spider-Man moves left
-      - "move_right": Spider-Man moves right  
-      - "move_idle": Spider-Man stands still
-      - "jump": Spider-Man jumps
-      - "switch_suit": Toggle between normal and Jarvis suit
-      - "wait": Do nothing this frame
+      Output format (choose EXACTLY ONE of these, no explanation):
+      - "move_left"
+      - "move_right"
+      - "move_idle"
+      - "jump"
+      - "switch_suit"
+      - "wait"
 
       Consider: danger zones, building heights, villain energy, and survival.
-      Output ONLY the action name, no explanation.
     `;
 
     // ----- Get AI response -----
@@ -121,6 +182,9 @@ export async function getAIAction(
     const validAction: 'move_left' | 'move_right' | 'move_idle' | 'jump' | 'switch_suit' | 'wait' =
       validActions.includes(actionText as any) ? (actionText as any) : 'move_idle';
 
+    // Dispatch the action as a key event
+    dispatchAIAction(validAction, gameOver);
+
     return {
       action: validAction,
       source: 'nemotron-webgpu',
@@ -128,12 +192,17 @@ export async function getAIAction(
     };
   } catch (error: any) {
     console.error('Nemotron inference error, falling back:', error.message);
-    return fallbackDecision(gameState);
+    const fallbackAction = await fallbackDecision(gameState);
+    if (gameOver) {
+      dispatchAIAction(fallbackAction.action, true);
+    }
+    return fallbackAction;
   }
 }
 
 /**
  * Fallback decision generator (existing rule‑based logic).
+ * Simple rules based on game state.
  */
 function fallbackDecision(
   gameState: {
@@ -155,7 +224,7 @@ function fallbackDecision(
   // Simple rule‑based fallback
   let action: 'move_left' | 'move_right' | 'move_idle' | 'jump' | 'switch_suit' | 'wait' = 'move_idle';
 
-  // If in immediate danger, stay idle (or you could add avoidance logic here)
+  // If in immediate danger, stay idle
   if (danger_zone && danger_zone.length > 0) {
     action = 'move_idle';
   }
