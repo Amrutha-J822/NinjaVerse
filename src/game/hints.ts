@@ -15,7 +15,7 @@ const HINTS: { text: string; when: () => boolean }[] = [
   },
   { text: 'Aim for the glowing block!', when: () => world.player.x >= 35.3 },
   { text: 'Follow my light. That one is false!', when: () => world.player.x >= 41 },
-  { text: 'The wind is pushing left!', when: () => world.player.x >= 49.6 }
+  { text: 'The wind is pushing left!', when: () => world.player.x >= 65.4 }
 ];
 
 const said = new Set<string>();

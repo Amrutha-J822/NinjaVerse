@@ -3,7 +3,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { KeyboardControls } from '@react-three/drei';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 
-import { FireBreath, FlameTrail } from '../../components/Effects';
+import { FireBreath, FlamePath, FlameTrail } from '../../components/Effects';
 import { EmberChat } from '../../components/EmberChat';
 import { Environment } from '../../components/Environment';
 import { Fireball } from '../../components/Fireball';
@@ -11,7 +11,7 @@ import { Ninja } from '../../components/Ninja';
 import { keyMap } from '../../config/controls';
 import { autoAssist } from '../../game/ember';
 import { checkHints, resetHints } from '../../game/hints';
-import { FINISH_X, LEVEL_WIDTH, resetLevel, VINE_WALL, vineWallBase } from '../../game/level';
+import { burnFrontX, FINISH_X, LEVEL_WIDTH, resetLevel, vineDeck } from '../../game/level';
 import { resetWorld, world } from '../../game/world';
 import PauseMenu from '../Menus/PauseMenu';
 
@@ -61,7 +61,7 @@ function HintWatcher() {
   return null;
 }
 
-/** Tells the page once the ninja reaches the far rooftop. */
+/** Tells the page once the ninja reaches the last building. */
 function FinishWatcher({ onFinish }: { onFinish: () => void }) {
   const done = useRef(false);
   useFrame(() => {
@@ -117,8 +117,9 @@ export default function GameScene() {
           <GameClock />
           <Environment />
           <FlameTrail />
+          <FlamePath />
           <Fireball />
-          <FireBreath target={[VINE_WALL.x + VINE_WALL.width / 2, vineWallBase() + VINE_WALL.height * 0.45]} />
+          <FireBreath target={() => [burnFrontX(world.time) + 0.3, vineDeck + 0.4]} />
           <Ninja />
           <CameraRig />
           <HintWatcher />

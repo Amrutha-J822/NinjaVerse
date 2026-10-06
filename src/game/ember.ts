@@ -2,6 +2,9 @@ import { invoke, isTauri } from '@tauri-apps/api/core';
 
 import {
   burnVines,
+  drawFlamePath,
+  FLAME_GAP,
+  flamePathState,
   floorBelow,
   inDark,
   inWind,
@@ -10,9 +13,10 @@ import {
   Piece,
   pieceState,
   standHeight,
-  VINE_WALL,
+  VINE_BURN_TIME,
+  vineBridge,
+  vineDeck,
   vineState,
-  vineWallBase,
   widthOf,
   WIND_ZONE
 } from './level';
@@ -58,12 +62,12 @@ const COOLDOWN: Record<string, number> = {
 const LIGHT_TIME = 6;
 const WARN_TIME = 4;
 const SLOW_FALL_TIME = 1.5;
-const BURN_TIME = 1.4; // Ember breathes fire this long (matches the level's burn time)
 const LEDGE_REACH = 3; // a ledge this close sideways can be reached by a rescue
 const LEDGE_ABOVE = 2.5; // ...and this far above him
 const RESCUE_APEX = 0.8; // the rescue arc peaks this far above the higher of him and the ledge
 const NINJA_GRAVITY = 20; // same as the ninja's gravity
-const VINE_NEAR = 3; // Ember offers to burn the vines when he is this close to them
+const VINE_NEAR = 1.3; // Ember steps in once he is right at the vines
+const GAP_NEAR = 1.6; // ...and once he reaches the edge of the gap that is too wide to jump
 const NEARBY = 8; // objects this close are listed in the game state
 const PX_PER_UNIT = 100; // the game state uses image pixels, like the art
 
@@ -207,13 +211,21 @@ function reachableLedge() {
 
 const lit = (x: number) => world.time < world.ember.lightUntil || Math.abs(world.fireball.x - x) < 2.6 || !inDark(x);
 
-/** The vine wall is standing just ahead of him (in the direction he faces). */
+/** The overgrown bridge is just ahead of him (in the direction he faces), vines still on it. */
 function nearVines() {
-  if (!vineState(world.time).solid) return false;
-  const center = VINE_WALL.x + VINE_WALL.width / 2;
-  const ahead = (center - world.player.x) * world.facing;
-  const sameHeight = Math.abs(world.player.y - vineWallBase()) < 2;
-  return ahead > 0 && ahead < VINE_NEAR && sameHeight;
+  const vines = vineState(world.time);
+  if (vines.gone || vines.burning) return false;
+  const edge = world.facing > 0 ? vineBridge.x : vineBridge.x + widthOf(vineBridge);
+  const ahead = (edge - world.player.x) * world.facing;
+  const sameHeight = Math.abs(world.player.y - vineDeck) < 2;
+  return ahead > -0.2 && ahead < VINE_NEAR && sameHeight;
+}
+
+/** He has reached the edge of the wide gap, and the flame path isn't there yet. */
+function atWideGap() {
+  if (flamePathState(world.time).started) return false;
+  const ahead = FLAME_GAP.x0 - world.player.x;
+  return ahead > -0.3 && ahead < GAP_NEAR && world.player.y > FLAME_GAP.y - 0.5;
 }
 
 /** The game state Ember is given with every message, in the format from the design notes. */
@@ -320,7 +332,7 @@ export function execute(action: EmberAction) {
   }
   if (action === 'BURN_VINES') {
     burnVines(now);
-    ember.burnUntil = now + BURN_TIME;
+    ember.burnUntil = now + VINE_BURN_TIME;
   }
 }
 
@@ -400,17 +412,23 @@ ${JSON.stringify(message)}`;
 
 // --- helping without being asked ------------------------------------------------
 
-const say = (text: string) => {
+const say = (text: string, seconds = 3) => {
   world.ember.reply = text;
-  world.ember.replyUntil = world.time + 3;
+  world.ember.replyUntil = world.time + seconds;
 };
 
 /**
- * Ember helps on its own in two moments from the design: when the ninja walks up to
- * the vines it burns them, and when he misses a platform it carries him to the ledge
- * (limited uses). Called every frame; the same checks as the chat actions apply.
+ * Ember helps on its own in three moments from the design: when the ninja walks up to
+ * the vines it burns them, when he reaches the gap that is too wide to jump it draws a
+ * path of flame steps across it, and when he misses a platform it carries him to the
+ * ledge (limited uses). Called every frame; the same checks as the chat actions apply.
  */
 export function autoAssist() {
+  if (atWideGap()) {
+    drawFlamePath(world.time);
+    say('Follow my flame to the ledge!', 4);
+    return;
+  }
   if (validate('BURN_VINES')) {
     execute('BURN_VINES');
     say('I will clear the shortcut!');

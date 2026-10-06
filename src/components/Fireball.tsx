@@ -6,14 +6,16 @@ import { useFrame } from '@react-three/fiber';
 
 import { art } from '../game/art';
 import {
+  burnFrontX,
+  flamePathState,
+  flamePathY,
   floorBelow,
   inDark,
   level,
   nextPlatform,
   standHeight,
   START,
-  VINE_WALL,
-  vineWallBase,
+  vineDeck,
   widthOf
 } from '../game/level';
 import { world } from '../game/world';
@@ -28,12 +30,14 @@ const BEHIND = 1.1; // floats this far behind his shoulder
 const ABOVE = 1.6;
 const HOVER = 1.1; // height above a platform it is lighting or warning about
 const RESCUE = 7; // how quickly it flies ahead to the ledge during a rescue
+const DRAW = 14; // how closely it keeps to the head of the flame path while drawing it
 
 /**
  * Ember, the fireball companion. Usually floats behind the ninja's shoulder, bobbing
  * and flickering. In the dark stretch it flies ahead and hovers over the next real
  * platform (never a false one) so its light shows where to jump.
- * When warning about a crumbling block it hovers over that block. Its hints and replies
+ * When warning about a crumbling block it hovers over that block, and at the wide gap it
+ * flies across drawing the flame path. Its hints and replies
  * show in a speech bubble.
  */
 export function Fireball() {
@@ -68,11 +72,18 @@ export function Fireball() {
       targetY = standHeight(target, t) + HOVER + bob;
       speed = GUIDE;
     }
-    // Breathing fire at the vines: hover just in front of them
+    // Breathing fire at the vines: fly along just behind the burning front, above the bridge
     if (t < world.ember.burnUntil) {
-      targetX = VINE_WALL.x - world.facing * 1.1;
-      targetY = vineWallBase() + 1.9 + bob;
-      speed = GUIDE;
+      targetX = burnFrontX(t) - 0.9;
+      targetY = vineDeck + 2.2 + bob;
+      speed = RESCUE;
+    }
+    // Drawing the flame path: fly across the gap at the head of the flame, just above it
+    const path = flamePathState(t);
+    if (path.drawing) {
+      targetX = path.head;
+      targetY = flamePathY(path.head) + 0.55 + bob;
+      speed = DRAW;
     }
     // Rescue: fly ahead to the ledge so the ninja can follow the flame
     if (t < world.ember.pushUntil) {

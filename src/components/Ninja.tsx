@@ -11,12 +11,13 @@ import {
   floorBelow,
   inWind,
   level,
+  LEVEL_WIDTH,
   MAX_STEP,
   pieceState,
   standHeight,
   START,
   touch,
-  vineWallBlocks,
+  vinesBlock,
   widthOf,
   WIND_ZONE
 } from '../game/level';
@@ -40,6 +41,7 @@ const GRAVITY = 20;
 const JUMP_SPEED = 8; // single Up arrow: normal jump
 const NINJA_JUMP_SPEED = 11; // Up arrow again in the air: ninja high jump
 const RUN_FPS = 8;
+const LEVEL_END = LEVEL_WIDTH - 0.6; // he can't run past the end of the last building
 
 /**
  * The ninja. Left/Right run, Up jumps, and Up again while in the air does
@@ -109,9 +111,9 @@ export function Ninja() {
       const nextX = pos.x + dx * RUN_SPEED * dt;
       const ahead = floorBelow(nextX, pos.y + 1.2, now);
       const wall = grounded && ahead !== null && ahead.y > pos.y + MAX_STEP;
-      // The vine wall blocks him until Ember burns it (or he jumps over it)
-      const vines = vineWallBlocks(pos.x, nextX, pos.y, now);
-      if (!wall && !vines) pos.x = nextX;
+      // The overgrown bridge's vines block him until Ember burns them away
+      const vines = vinesBlock(pos.x, nextX, pos.y, now);
+      if (!wall && !vines) pos.x = Math.min(nextX, LEVEL_END); // the far wall of the last building
     }
     let { facing } = lookRef.current;
     if (dx !== 0) facing = dx;

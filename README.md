@@ -1,6 +1,6 @@
 # Ninjaverse
 
-A pixel art exploration and jumping game for the desktop. Guide a little ninja across the rooftops of a moonlit city, with a friendly fireball floating by your side. Jump the gaps in a broken rope bridge, ride floating platforms, keep moving over blocks that crumble under your feet, find your way through a dark stretch where only the fireball's light shows the path (and reveals a false platform), then cross the vine bridge against the wind, where Ember burns away a wall of vines, to reach the far rooftop. Ember calls out tips as you reach each challenge, and if you miss a platform it can carry you back to the ledge (three times per game).
+A pixel art exploration and jumping game for the desktop. Guide a little ninja across the rooftops of a moonlit city, with a friendly fireball floating by your side. Jump the gaps in a broken rope bridge, ride floating platforms, keep moving over blocks that crumble under your feet, find your way through a dark stretch where only the fireball's light shows the path (and reveals a false platform), reach a bridge choked with vines, where Ember sweeps fire across it and clears the way to the shrine rooftop, then fight the wind across the vine bridge. At the last rooftop the gap to the final building is too wide to jump, so Ember draws a swirling path of flame across it and you hop along the flame steps to the other side. Ember calls out tips as you reach each challenge, and if you miss a platform it can carry you back to the ledge (three times per game).
 
 ## Concept art
 
@@ -21,11 +21,11 @@ A pixel art exploration and jumping game for the desktop. Guide a little ninja a
 | Talk to Ember | T |
 | Pause | Esc |
 
-Glowing gold blocks are checkpoints. If you fall, you start again from the last one you reached.
+Glowing gold blocks and the shrine rooftop are checkpoints. If you fall, you start again from the last one you reached.
 
 ## Ember, your fireball
 
-Press T to talk to Ember. The game freezes while you chat. Ask about the route, whether a block is safe or where to jump, and Ember answers based on what is happening in the game. It can also help: light up the dark stretch, warn you about an unsafe block, burn vines out of your way, slow your fall or carry you to a ledge. Some of this it does on its own, like burning the vines when you reach them or rescuing you when you miss a jump. Ask about anything else and you get a quirky fireball reply instead.
+Press T to talk to Ember. The game freezes while you chat. Ask about the route, whether a block is safe or where to jump, and Ember answers based on what is happening in the game. It can also help: light up the dark stretch, warn you about an unsafe block, burn vines out of your way, slow your fall or carry you to a ledge. Some of this it does on its own, like burning the vines when you reach them, drawing a flame path over the gap that is too wide to jump, or rescuing you when you miss a jump. Ask about anything else and you get a quirky fireball reply instead.
 
 Ember's brain is Nemotron-Mini-4B-Instruct, running on your own computer through Ollama. The model only suggests what to say and do; the game checks every suggestion and only carries out help that is allowed right now.
 

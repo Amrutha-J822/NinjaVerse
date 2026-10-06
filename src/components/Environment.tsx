@@ -3,23 +3,12 @@ import { Group, ShaderMaterial } from 'three';
 
 import { useFrame, useThree } from '@react-three/fiber';
 
-import { backgroundArt } from '../game/art';
-import {
-  DARK_ZONE,
-  level,
-  LEVEL_WIDTH,
-  Piece,
-  pieceState,
-  PX,
-  triggeredFor,
-  VINE_WALL,
-  vineWallBase,
-  widthOf
-} from '../game/level';
+import { art, backgroundArt } from '../game/art';
+import { DARK_ZONE, level, LEVEL_WIDTH, Piece, pieceState, PX, triggeredFor, vineState, widthOf } from '../game/level';
 import { world } from '../game/world';
 
-import { Debris, Glow, VineWall, Wind } from './Effects';
-import { GameSprite } from './GameSprite';
+import { BridgeFire, Debris, Glow, Wind } from './Effects';
+import { GameSprite, textureFor } from './GameSprite';
 
 const background = { ...backgroundArt, originX: backgroundArt.width / 2 };
 
@@ -86,13 +75,14 @@ function LevelPiece({ piece }: { piece: Piece }) {
   });
 
   let tint = '#ffffff';
-  if (piece.checkpoint) tint = '#ffe08a';
+  const glowingBlock = piece.checkpoint && piece.art === art.stepBlock; // the shrine rooftop has its own lantern
+  if (glowingBlock) tint = '#ffe08a';
   if (kind === 'false' && revealed) tint = '#ff5a4a';
 
   return (
     <group position={[restX, piece.y, 0]}>
       <group ref={ref}>
-        {piece.checkpoint && (
+        {glowingBlock && (
           <group position={[0, piece.art.height * PX * 0.5, 0]}>
             <Glow color="#ffb640" size={2.2} pulse={0.08} />
           </group>
@@ -113,6 +103,69 @@ function LevelPiece({ piece }: { piece: Piece }) {
           />
         </group>
       )}
+    </group>
+  );
+}
+
+/**
+ * The overgrown bridge. Its vines cover it completely until Ember burns them: the fire
+ * sweeps from the near end to the far end, the vines vanish behind a glowing burning edge,
+ * and the cleared, charred beam shows underneath for the ninja to cross.
+ */
+function OvergrownBridge({ piece }: { piece: Piece }) {
+  const width = widthOf(piece);
+  const height = piece.art.height * PX;
+  const restX = piece.x + piece.art.originX * PX;
+  const beam = useRef<Group>(null);
+  const material = useMemo(
+    () =>
+      new ShaderMaterial({
+        fragmentShader: `
+          uniform sampler2D uMap;
+          uniform float uFront;
+          uniform float uTime;
+          varying vec2 vUv;
+          void main() {
+            vec4 color = texture2D(uMap, vUv);
+            float past = vUv.x - uFront;
+            if (color.a < 0.5 || past < 0.0) discard;
+            if (uFront > 0.0 && past < 0.025) {
+              // the burning edge flickers between orange and yellow
+              color.rgb = mix(vec3(1.0, 0.45, 0.08), vec3(1.0, 0.85, 0.35), step(0.5, fract(uTime * 12.0 + vUv.y * 7.0)));
+            } else if (uFront > 0.0 && past < 0.07) {
+              color.rgb *= vec3(1.0, 0.55, 0.35); // scorched just ahead of the fire
+            }
+            gl_FragColor = color;
+            #include <encodings_fragment>
+          }`,
+        uniforms: { uFront: { value: 0 }, uMap: { value: textureFor(piece.art.src) }, uTime: { value: 0 } },
+        vertexShader: `
+          varying vec2 vUv;
+          void main() {
+            vUv = uv;
+            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+          }`
+      }),
+    [piece]
+  );
+  useFrame(() => {
+    const state = vineState(world.time);
+    material.uniforms.uFront.value = state.front;
+    material.uniforms.uTime.value = world.time;
+    if (beam.current) beam.current.visible = state.front > 0;
+  });
+  return (
+    <group position={[restX, piece.y, 0]}>
+      {/* The charred beam, revealed as the vines burn away */}
+      <group ref={beam} visible={false}>
+        <GameSprite art={art.vineBeamBurnt} />
+      </group>
+      <mesh position={[0, height / 2, 0.01]} material={material}>
+        <planeGeometry args={[width, height]} />
+      </mesh>
+      <group position={[-width / 2, (art.vineBeamBurnt.surfaces[0] ?? 0) * PX, 0.1]}>
+        <BridgeFire front={() => vineState(world.time)} width={width} />
+      </group>
     </group>
   );
 }
@@ -191,10 +244,15 @@ export function Environment() {
   return (
     <>
       <Background />
-      {level.map((piece) => (
-        <LevelPiece key={piece.id} piece={piece} />
-      ))}
-      <VineWall base={vineWallBase()} height={VINE_WALL.height} width={VINE_WALL.width} x={VINE_WALL.x} />
+      {level
+        .filter((piece) => piece.motion?.kind !== 'flame') // the flame steps are drawn with the flame path
+        .map((piece) =>
+          piece.overgrown ? (
+            <OvergrownBridge key={piece.id} piece={piece} />
+          ) : (
+            <LevelPiece key={piece.id} piece={piece} />
+          )
+        )}
       <Darkness />
       <Wind />
     </>

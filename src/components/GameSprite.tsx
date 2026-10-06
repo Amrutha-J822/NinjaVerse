@@ -15,7 +15,7 @@ const loader = new TextureLoader();
 const textures = new Map<string, Texture>();
 
 /** Load each picture once, with crisp nearest-neighbor pixels. */
-function textureFor(src: string) {
+export function textureFor(src: string) {
   let texture = textures.get(src);
   if (!texture) {
     texture = loader.load(src);

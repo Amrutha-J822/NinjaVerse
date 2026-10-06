@@ -32,6 +32,7 @@ FILES = {
     3: "concept-3-vine-bridge.webp",
     4: "concept-4-stepping-stones.webp",
     5: "concept-5-stone-path.webp",
+    6: "concept-6-burning-vines.webp",
 }
 PICS = {n: np.asarray(Image.open(os.path.join(CONCEPTS, f)).convert("RGB")) for n, f in FILES.items()}
 ALIGNED = (1, 2, 3, 5)  # these four share exactly the same framing; picture 4 is framed differently
@@ -206,6 +207,72 @@ def finish_platform(img, fg, min_area=80):
     return crop(np.dstack([a[..., :3], pieces_over(a[..., 3] > 0, min_area) * 255]).astype(np.uint8))
 
 
+# The bridge frame inside the vine bridge picture: a top rail you walk on, a lower rail,
+# and crossbars between them (rows and spacing in image pixels)
+BEAM_TOP, BEAM_BOTTOM = 60, 84
+LOWER_TOP, LOWER_BOTTOM = 118, 136
+CROSSBAR_EVERY = 78
+
+
+def burnt(rgba):
+    """The beam bridge after the vines burn: the original end posts, and the charred bridge
+    frame drawn in pixel art where the vines used to cover it."""
+    a = rgba.copy()
+    h, w = a.shape[:2]
+    r, g, b = [a[..., i].astype(int) for i in range(3)]
+    green = (g > r + 8) & (g >= b - 12)
+    keep = np.zeros((h, w), bool)
+    keep[:, :45] = keep[:, -45:] = True  # end posts
+    a[..., 3] = np.where(keep & (a[..., 3] > 0) & ~green, a[..., 3], 0)
+    a[..., 3] = np.where(pieces_over(a[..., 3] > 0, 120), a[..., 3], 0)
+    a[..., :3] = (a[..., :3].astype(float) * np.array([0.6, 0.52, 0.5])).astype(np.uint8)
+
+    rng = np.random.default_rng(6)  # same bridge every time
+
+    def wood(y0, y1, x0, x1):
+        for y in range(y0, y1 + 1):
+            for x in range(x0, x1 + 1):
+                if y in (y0, y1) or x in (x0, x1):
+                    color = (18, 12, 10)  # outline
+                elif y < y0 + 4:
+                    color = (78, 56, 42)  # lit top edge
+                else:
+                    color = (52, 38, 30)
+                    if rng.random() < 0.12:
+                        color = (36, 26, 21)  # grain
+                    if rng.random() < 0.012:
+                        color = (255, 140, 40) if rng.random() < 0.7 else (255, 210, 90)  # embers
+                a[y, x] = (*color, 255)
+
+    for x in range(45 + CROSSBAR_EVERY // 2, w - 45, CROSSBAR_EVERY):
+        wood(BEAM_BOTTOM, LOWER_TOP, x - 5, x + 5)
+    wood(LOWER_TOP, LOWER_BOTTOM, 20, w - 21)
+    wood(BEAM_TOP, BEAM_BOTTOM, 20, w - 21)
+    # Same size as the unburnt bridge so they line up exactly
+    return a
+
+
+def overgrow(rgba):
+    """Pile more of the picture's own vines onto the bridge, so it is properly overgrown:
+    shifted copies of the vine layer, over the beam and hanging lower below it."""
+    a = rgba.copy()
+    r, g, b = [rgba[..., i].astype(int) for i in range(3)]
+    vine = (rgba[..., 3] > 0) & (g > r + 8) & (g >= b - 12)
+    # Shifts (right, down) in pixels; copies wrap around sideways along the bridge
+    for dx, dy in [(-90, -4), (75, 6), (140, -8), (-150, 30), (110, 55), (-60, 70)]:
+        layer = np.roll(np.roll(vine, dx, axis=1), dy, axis=0)
+        colors = np.roll(np.roll(rgba, dx, axis=1), dy, axis=0)
+        if dy > 0:
+            layer[:dy] = False
+        else:
+            layer[dy:] = False
+        a[layer] = colors[layer]
+    # Keep the end posts readable
+    a[:, :18] = rgba[:, :18]
+    a[:, -18:] = rgba[:, -18:]
+    return a
+
+
 def build_platforms():
     out = {}
     simple = {
@@ -230,6 +297,30 @@ def build_platforms():
         bg_boxes=[(300, 0, 450, 430)], diff_seed=False,
     )
     out["roof-left"] = finish_platform(img, largest_piece(fg))
+
+    # Vine-covered beam bridge (picture 6). Ember's fire is painted over its middle, so for the
+    # unburnt bridge that part is covered with vines copied from the right half of the same bridge
+    # (same rows, so the beam lines up). The burnt bridge is the same picture with the vines removed.
+    vines = PICS[6][480:840, 690:1372].copy()
+    vines[0:300, 80:330] = vines[0:300, 400:650]
+    # Sparks from the painted fire float above the vines: drop bright pinks and whites up there
+    vr, vg, vb = [vines[..., i].astype(int) for i in range(3)]
+    sparks = ((vr > 170) & (vb > 140)) | (vr + vg + vb > 600)
+    sparks[60:, :] = False
+    mask = np.full(vines.shape[:2], cv2.GC_PR_BGD, np.uint8)
+    mask[40:165, 10:670] = cv2.GC_FGD  # vines and beam
+    mask[:8, :] = cv2.GC_BGD
+    fg = grabcut(vines, mask) & ~sparks
+    out["vine-beam"] = overgrow(finish_platform(vines, fg))
+    out["vine-beam-burnt"] = burnt(out["vine-beam"])
+
+    # Shrine rooftop on the right of picture 6, with its glowing lantern and water tower
+    img, fg = cut_platform(
+        6, (1345, 140, 1774, 887),
+        seeds=[(40, 395, 425, 740), (190, 170, 370, 400), (260, 20, 360, 180)],
+        diff_seed=False,
+    )
+    out["roof-shrine"] = finish_platform(img, largest_piece(fg))
 
     # Rope bridge: rope and planks are warm browns; everything blue behind them is city
     img = PICS[1][470:720, 665:1625].copy()
@@ -316,7 +407,11 @@ def ledge_row(alpha):
 def surfaces(name, a):
     alpha = a[..., 3] > 0
     h, w = alpha.shape
-    if name in ("roof-left", "roof-right"):
+    if name == "vine-beam-burnt":
+        return flat_deck(alpha, BEAM_TOP)  # the top of the charred beam
+    if name == "vine-beam":
+        return [None for _ in range(0, w, COLUMN)]  # nothing to stand on while it is overgrown
+    if name in ("roof-left", "roof-right", "roof-shrine"):
         return flat_deck(alpha, ledge_row(alpha))
     if name == "swing":
         rows = alpha.sum(1)

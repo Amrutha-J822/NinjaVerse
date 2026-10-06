@@ -14,11 +14,14 @@ import ninjaRun from '../assets/game/ninja-run.png';
 import plank from '../assets/game/plank.png';
 import roofLeft from '../assets/game/roof-left.png';
 import roofRight from '../assets/game/roof-right.png';
+import roofShrine from '../assets/game/roof-shrine.png';
 import ropeBridge from '../assets/game/rope-bridge.png';
 import stepBlock from '../assets/game/step-block.png';
 import stoneBig from '../assets/game/stone-big.png';
 import stoneWide from '../assets/game/stone-wide.png';
 import swing from '../assets/game/swing.png';
+import vineBeam from '../assets/game/vine-beam.png';
+import vineBeamBurnt from '../assets/game/vine-beam-burnt.png';
 import vineBridge from '../assets/game/vine-bridge.png';
 
 export const SURFACE_COLUMN = 10;
@@ -208,6 +211,104 @@ export const art = {
     surfaces: [
       289, 289, 289, 289, 289, 289, 289, 289, 289, 289, 289, 289, 289, 289, 289, 289, 289, 289, 289, 289, 289, 289, 289,
       289, 289, 289, 289, 289, 289, 289, 289, 289, 289, 289, 289, 289, 289, 289, 289, 289, 289, 289, 289, 289, 289
+    ]
+  },
+  vineBeam: {
+    height: 340,
+    originX: 341.0,
+    src: vineBeam,
+    width: 682,
+    surfaces: [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  vineBeamBurnt: {
+    height: 340,
+    originX: 341.0,
+    src: vineBeamBurnt,
+    width: 682,
+    surfaces: [
+      280, 280, 280, 280, 280, 280, 280, 280, 280, 280, 280, 280, 280, 280, 280, 280, 280, 280, 280, 280, 280, 280, 280,
+      280, 280, 280, 280, 280, 280, 280, 280, 280, 280, 280, 280, 280, 280, 280, 280, 280, 280, 280, 280, 280, 280, 280,
+      280, 280, 280, 280, 280, 280, 280, 280, 280, 280, 280, 280, 280, 280, 280, 280, 280, 280, 280, 280, 280, 280, 280
+    ]
+  },
+  roofShrine: {
+    height: 743,
+    originX: 214.5,
+    src: roofShrine,
+    width: 429,
+    surfaces: [
+      361, 361, 361, 361, 361, 361, 361, 361, 361, 361, 361, 361, 361, 361, 361, 361, 361, 361, 361, 361, 361, 361, 361,
+      361, 361, 361, 361, 361, 361, 361, 361, 361, 361, 361, 361, 361, 361, 361, 361, 361, 361, 361, 361
     ]
   },
   ropeBridge: {
