@@ -15,6 +15,8 @@ export const world = {
   grounded: true,
   /** The fireball's position: its light reveals the dark stretch */
   fireball: new Vector3(),
+  /** How dark the rooftops and characters are drawn (0 = as drawn, 1 = silhouettes against the dawn) */
+  shade: 0,
   ember: {
     /** Ember's latest spoken reply, shown above the fireball until replyUntil */
     reply: '',
@@ -49,6 +51,7 @@ export const world = {
 export function resetWorld() {
   world.time = 0;
   world.paused = false;
+  world.shade = 0;
   world.ember.reply = '';
   world.ember.replyUntil = 0;
   world.ember.lightUntil = 0;

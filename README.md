@@ -1,6 +1,6 @@
 # Ninjaverse
 
-A pixel art exploration and jumping game for the desktop. Guide a little ninja across the rooftops of a moonlit city, with a friendly fireball floating by your side. Jump the gaps in a broken rope bridge, ride floating platforms, keep moving over blocks that crumble under your feet, find your way through a dark stretch where only the fireball's light shows the path (and reveals a false platform), reach a bridge choked with vines, where Ember sweeps fire across it and clears the way to the shrine rooftop, then fight the wind across the vine bridge. At the last rooftop the gap to the final building is too wide to jump, so Ember draws a swirling path of flame across it and you hop along the flame steps to the other side. Ember calls out tips as you reach each challenge, and if you miss a platform it can carry you back to the ledge (three times per game).
+A pixel art exploration and jumping game for the desktop. Guide a little ninja across the rooftops of a moonlit city, with a friendly fireball floating by your side. Jump the gaps in a broken rope bridge, ride floating platforms, keep moving over blocks that crumble under your feet, find your way through a dark stretch where only the fireball's light shows the path (and reveals a false platform), reach a bridge choked with vines, where Ember sweeps fire across it and clears the way to the shrine rooftop, then fight the wind across the vine bridge. At the last rooftop the gap to the final building is too wide to jump, so Ember draws a swirling path of flame across it and you hop along the flame steps to the highest rooftop. There, at sunrise, Ember lights a giant lantern, every rooftop path you crossed lights up across the city, and the two friends share a last word before the journey continues. You can replay the journey from the end screen. Ember calls out tips as you reach each challenge, and if you miss a platform it can carry you back to the ledge (three times per game).
 
 ## Concept art
 
@@ -46,6 +46,7 @@ Without it the game still plays; Ember just tells you its brain is switched off.
 - React Router to move between screens
 - Framer Motion for title screen fades
 - use-sound for button sounds
+- Web Audio for the game's sound effects and music
 
 **Game**
 - Three.js with React Three Fiber to draw the game world in flat 2D
@@ -61,6 +62,17 @@ Without it the game still plays; Ember just tells you its brain is switched off.
 
 **Ember**
 - Nemotron-Mini-4B-Instruct, run locally with Ollama
+
+## Sounds
+
+Every jump, landing, crumbling block, creaky bridge and burst of Ember's fire has its own sound, with music in the background and wind on the vine bridge. The sounds are free packs from OpenGameArt.org, kept in `assets/sounds/`:
+
+- [Sound effects for platformer](https://opengameart.org/content/sound-effects-for-platformer) by Listener (CC0)
+- [Interface Sounds](https://opengameart.org/content/interface-sounds) and [50 RPG Sound Effects](https://opengameart.org/content/50-rpg-sound-effects) by Kenney (CC0)
+- [80 CC0 RPG SFX](https://opengameart.org/content/80-cc0-rpg-sfx) by rubberduck (CC0)
+- Music: [Title Screen Loop](https://opengameart.org/content/title-screen-loop) by GboxMikeFozzy (CC0)
+
+`assets/sounds/CREDITS.md` lists which sound came from which pack.
 
 ## Run it
 

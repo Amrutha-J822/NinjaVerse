@@ -2,10 +2,13 @@
 // Sizes are in image pixels; surfaces are walkable heights (from the sprite's bottom)
 // every 10 pixels across, or null where there is nothing to stand on.
 import background from '../assets/game/background.png';
+import backgroundDawn from '../assets/game/background-dawn.png';
 import fireball1 from '../assets/game/fireball-1.png';
 import fireball2 from '../assets/game/fireball-2.png';
 import fireball3 from '../assets/game/fireball-3.png';
 import fireball4 from '../assets/game/fireball-4.png';
+import lanternRoof from '../assets/game/lantern-roof.png';
+import lanternRoofDormant from '../assets/game/lantern-roof-dormant.png';
 import ninjaFall from '../assets/game/ninja-fall.png';
 import ninjaLeap from '../assets/game/ninja-leap.png';
 import ninjaReady from '../assets/game/ninja-ready.png';
@@ -27,6 +30,7 @@ import vineBridge from '../assets/game/vine-bridge.png';
 export const SURFACE_COLUMN = 10;
 
 export const backgroundArt = { height: 700, src: background, width: 1310 };
+export const backgroundDawnArt = { height: 700, src: backgroundDawn, width: 1310 };
 
 export const art = {
   ninjaRun: { height: 184, originX: 119.0, src: ninjaRun, width: 203 },
@@ -413,6 +417,30 @@ export const art = {
       83,
       null,
       null
+    ]
+  },
+  lanternRoof: {
+    height: 990,
+    originX: 350.0,
+    src: lanternRoof,
+    width: 700,
+    surfaces: [
+      401, 401, 401, 401, 401, 401, 401, 401, 401, 401, 401, 401, 401, 401, 401, 401, 401, 401, 401, 401, 401, 401, 401,
+      401, 401, 401, 565, 565, 565, 565, 565, 565, 565, 565, 565, 565, 565, 565, 565, 565, 565, 565, 565, 565, 565, 565,
+      565, 565, 565, 565, 565, 565, 565, 565, 565, 565, 565, 565, 565, 565, 565, 565, 565, 565, 565, 565, 565, 565, 565,
+      565
+    ]
+  },
+  lanternRoofDormant: {
+    height: 990,
+    originX: 350.0,
+    src: lanternRoofDormant,
+    width: 700,
+    surfaces: [
+      401, 401, 401, 401, 401, 401, 401, 401, 401, 401, 401, 401, 401, 401, 401, 401, 401, 401, 401, 401, 401, 401, 401,
+      401, 401, 401, 565, 565, 565, 565, 565, 565, 565, 565, 565, 565, 565, 565, 565, 565, 565, 565, 565, 565, 565, 565,
+      565, 565, 565, 565, 565, 565, 565, 565, 565, 565, 565, 565, 565, 565, 565, 565, 565, 565, 565, 565, 565, 565, 565,
+      565
     ]
   }
 };

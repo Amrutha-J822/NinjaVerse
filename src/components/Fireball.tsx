@@ -5,6 +5,7 @@ import { Html } from '@react-three/drei';
 import { useFrame } from '@react-three/fiber';
 
 import { art } from '../game/art';
+import { endingTime, LANTERN, T } from '../game/ending';
 import {
   burnFrontX,
   flamePathState,
@@ -92,6 +93,14 @@ export function Fireball() {
       speed = RESCUE;
     }
 
+    // The ending: float into the giant lantern and stay inside while it glows, then come back
+    const since = endingTime(t);
+    if (since !== null && since >= T.emberIn && since < T.emberBack) {
+      targetX = LANTERN.x;
+      targetY = LANTERN.y + bob * 0.5;
+      speed = 2.5;
+    }
+
     const k = 1 - Math.exp(-speed * delta);
     ball.position.x += (targetX - ball.position.x) * k;
     ball.position.y += (targetY - ball.position.y) * k;
@@ -116,7 +125,7 @@ export function Fireball() {
 
   return (
     <group ref={ref} position={[START.x - BEHIND, START.y + ABOVE, 0.9]}>
-      <GameSprite art={FLICKER[frame]} anchor="center" />
+      <GameSprite art={FLICKER[frame]} anchor="center" shaded={false} />
       {(talking || warning) && (
         <Html position={[0, 0.55, 0]} zIndexRange={[20, 0]}>
           {/* Speech bubble: dark box with a gold border, its tail pointing down at Ember.

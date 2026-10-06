@@ -3,9 +3,9 @@ import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 
 import background from '../assets/game/background.png';
-import SplashOpeningSFX from '../assets/Sounds/Sfx/splashOpening.mp3';
 import ButtonSfx, { menuSfx } from '../components/ButtonSfx/ButtonSfx';
 import { controlsHelp } from '../config/controls';
+import { music } from '../game/sound';
 
 const BUTTON_DELAY_MS = 2500; // the name shows on its own first
 
@@ -16,23 +16,13 @@ function TitleScreen() {
   const [showHelp, setShowHelp] = useState(false);
 
   useEffect(() => {
-    // Opening sound that fades out
-    const audio = new Audio(SplashOpeningSFX);
-    audio.play().catch(() => undefined);
-    const fadeOut = setInterval(() => {
-      if (audio.volume > 0.1) {
-        audio.volume -= 0.1;
-      } else {
-        clearInterval(fadeOut);
-        audio.pause();
-      }
-    }, 450);
-
+    // The title music fades in and loops until the game starts (browsers may hold it back
+    // until the first key press or click)
+    music.fadeTo(0.5, 2);
     const timer = setTimeout(() => setShowButton(true), BUTTON_DELAY_MS);
     return () => {
       clearTimeout(timer);
-      clearInterval(fadeOut);
-      audio.pause();
+      music.fadeTo(0, 0.8);
     };
   }, []);
 
@@ -83,6 +73,11 @@ function TitleScreen() {
                 ))}
               </tbody>
             </table>
+            <p className="mt-6 text-center text-[8px] leading-4 text-white/60">
+              Music: Title Screen Loop by GboxMikeFozzy (CC0)
+              <br />
+              Sounds: Listener, Kenney and rubberduck on OpenGameArt.org (CC0)
+            </p>
             <div className="mt-6 flex justify-center">
               <ButtonSfx sfxUrl={menuSfx} buttonLabel="Close" onClick={() => setShowHelp(false)} />
             </div>

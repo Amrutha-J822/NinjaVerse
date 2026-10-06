@@ -54,7 +54,8 @@ const labels = new Map<PieceArt, string>([
   [art.vineBeam, 'vine-covered bridge'],
   [art.roofShrine, 'shrine rooftop'],
   [art.roofRight, 'rooftop'],
-  [flameStep, 'flame step']
+  [flameStep, 'flame step'],
+  [art.lanternRoofDormant, 'highest rooftop']
 ]);
 
 let nextId = 0;
@@ -90,7 +91,7 @@ const flame: Motion = { kind: 'flame' };
  *  - another checkpoint, then a rooftop and a bridge overgrown with vines: Ember burns them away
  *  - the shrine rooftop (a checkpoint), then the vine bridge in a wind that pushes you left
  *  - a rooftop, then a gap far too wide to jump: Ember draws a path of flame across it
- *    and the ninja hops along the flame steps to the last building
+ *    and the ninja hops along the flame steps to the highest rooftop, with its giant lantern
  * Single jumps clear about 1.6 units up and 3.6 across; the ninja high jump goes much higher.
  */
 export const level: Piece[] = [
@@ -120,12 +121,12 @@ export const level: Piece[] = [
   // Windy vine bridge and the far rooftop
   place(art.vineBridge, 65.8, 3),
   place(art.roofRight, 77.3, 2),
-  // The gap that is too wide to jump, its flame steps, and the last building
+  // The gap that is too wide to jump, its flame steps, and the highest rooftop (where the journey ends)
   place(flameStep, 82.2, 2.5, flame),
   place(flameStep, 84.2, 3.1, flame),
   place(flameStep, 86.2, 2.6, flame),
   place(flameStep, 88.2, 3.2, flame),
-  place(art.roofShrine, 91, 3.2)
+  place(art.lanternRoofDormant, 91, 3.2)
 ];
 
 /** The stretch that is dark until the fireball lights it. */
@@ -134,8 +135,8 @@ export const DARK_ZONE = { x0: 40.2, x1: 48.2 };
 export const WIND_ZONE = { push: -1.6, x0: 65.6, x1: 77.1 };
 
 export const START = { x: 2.5, y: 0 };
-export const FINISH_X = 91.6; // reaching the last building
-export const LEVEL_WIDTH = 95.5;
+export const FINISH_X = 91.6; // landing on the highest rooftop
+export const LEVEL_WIDTH = 98;
 export const FALL_LIMIT = -10; // falling below this sends you back to the last checkpoint
 export const MAX_STEP = 0.35; // how far up or down he follows a surface while walking
 
@@ -190,7 +191,7 @@ export const inWind = (x: number) => x >= WIND_ZONE.x0 && x <= WIND_ZONE.x1;
 
 // Crumbling blocks: shake for a moment after you land, drop, then come back.
 // False platforms: vanish as soon as you get close, then come back.
-const SHAKE_TIME = 0.6;
+export const SHAKE_TIME = 0.6;
 const VANISH_TIME = 0.3;
 export const FALSE_TRIGGER = 1.3; // how close (sideways) the ninja gets before a false platform vanishes
 const DROP_TIME = 2;
@@ -296,6 +297,9 @@ export function nextPlatform(
   });
   return best as { piece: Piece; distance: number } | null;
 }
+
+/** The highest rooftop, with the giant lantern Ember lights at the end. */
+export const highestRoof = level[level.length - 1];
 
 /** The flame steps across the wide gap. */
 export const flameSteps = level.filter((p) => p.motion?.kind === 'flame');

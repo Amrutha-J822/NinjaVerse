@@ -1,10 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Group } from 'three';
 
-import { useKeyboardControls } from '@react-three/drei';
+import { Html, useKeyboardControls } from '@react-three/drei';
 import { useFrame } from '@react-three/fiber';
 
 import { art } from '../game/art';
+import { endingTime, lineFor, STAND_X, T } from '../game/ending';
 import {
   FALL_LIMIT,
   FALSE_TRIGGER,
@@ -13,6 +14,7 @@ import {
   level,
   LEVEL_WIDTH,
   MAX_STEP,
+  Piece,
   pieceState,
   standHeight,
   START,
@@ -21,6 +23,7 @@ import {
   widthOf,
   WIND_ZONE
 } from '../game/level';
+import { play, playAny } from '../game/sound';
 import { world } from '../game/world';
 
 import { GameSprite } from './GameSprite';
@@ -43,6 +46,18 @@ const NINJA_JUMP_SPEED = 11; // Up arrow again in the air: ninja high jump
 const RUN_FPS = 8;
 const LEVEL_END = LEVEL_WIDTH - 0.6; // he can't run past the end of the last building
 
+const WOODEN = [art.plank, art.ropeBridge, art.swing, art.vineBridge, art.vineBeam];
+
+/** Landing: a thud on stone or wood, louder the harder he lands, or a puff of fire on a flame step. */
+function landSound(piece: Piece, speed: number) {
+  const volume = Math.min(1, 0.25 + speed / 16);
+  if (piece.motion?.kind === 'flame') play('flame-step', { volume: volume * 0.6 });
+  else if (WOODEN.includes(piece.art as (typeof WOODEN)[number])) playAny(['land-wood'], { volume });
+  else playAny(['land-stone'], { volume });
+  if (piece.art === art.ropeBridge) playAny(['bridge-creak-1', 'bridge-creak-2'], { volume: 0.5 });
+  if (piece.art === art.vineBridge) playAny(['leaf-rustle-1', 'leaf-rustle-2'], { volume: 0.5 });
+}
+
 /**
  * The ninja. Left/Right run, Up jumps, and Up again while in the air does
  * one ninja high jump. He rides moving platforms, sets off crumbling blocks by landing
@@ -53,13 +68,19 @@ const LEVEL_END = LEVEL_WIDTH - 0.6; // he can't run past the end of the last bu
 export function Ninja() {
   const ref = useRef<Group>(null);
   const [subscribeKeys, getKeys] = useKeyboardControls();
-  const [look, setLook] = useState<{ pose: Pose; facing: number }>({ facing: 1, pose: 'ready' });
+  // How he looks, and what he is saying (only in the ending)
+  const [look, setLook] = useState<{ pose: Pose; facing: number; line: string }>({
+    facing: 1,
+    line: '',
+    pose: 'ready'
+  });
   const lookRef = useRef(look);
   const velocityY = useRef(0);
   const jumpTapped = useRef(false);
   const ninjaJumpUsed = useRef(false);
   const checkpoint = useRef({ ...START });
   const lastTime = useRef(0);
+  const nextStepSound = useRef(0);
 
   // Catch every Up press the moment it happens, so quick double taps are never missed
   useEffect(
@@ -105,8 +126,15 @@ export function Ninja() {
       if (gap < FALSE_TRIGGER && Math.abs(standHeight(piece, now) - pos.y) < 2) touch(piece, now);
     });
 
+    // At the end of the journey he walks up to the lantern on his own (the keys do nothing)
+    const since = endingTime(now);
+    const ending = since !== null;
+    let dx = Number(keys.right) - Number(keys.left);
+    if (ending) {
+      dx = Math.abs(STAND_X - pos.x) > 0.08 ? Math.sign(STAND_X - pos.x) : 0;
+      jumpTapped.current = false;
+    }
     // Run left/right; a bump too tall to step onto stops him like a wall
-    const dx = Number(keys.right) - Number(keys.left);
     if (dx !== 0) {
       const nextX = pos.x + dx * RUN_SPEED * dt;
       const ahead = floorBelow(nextX, pos.y + 1.2, now);
@@ -117,6 +145,8 @@ export function Ninja() {
     }
     let { facing } = lookRef.current;
     if (dx !== 0) facing = dx;
+    // He watches Ember light the lantern, then turns to look out over the glowing city
+    if (ending && dx === 0) facing = since < T.pullIn ? 1 : -1;
 
     // Ember's rescue (PUSH_TOWARD_LEDGE) carries him in an arc onto a ledge
     const rescuing = now < world.ember.pushUntil;
@@ -133,9 +163,11 @@ export function Ninja() {
     if (jumpTapped.current) {
       if (grounded) {
         velocityY.current = JUMP_SPEED;
+        play('jump', { volume: 0.5 });
         ninjaJumpUsed.current = false;
       } else if (!ninjaJumpUsed.current) {
         velocityY.current = NINJA_JUMP_SPEED;
+        play('high-jump', { rate: 1.15, volume: 0.7 });
         ninjaJumpUsed.current = true;
       }
     }
@@ -153,16 +185,31 @@ export function Ninja() {
       if (slowFall) velocityY.current = Math.max(velocityY.current, -2);
       const nextY = pos.y + velocityY.current * dt;
       if (below !== null && velocityY.current <= 0 && nextY <= below.y) {
+        if (velocityY.current < -2) landSound(below.piece, -velocityY.current);
         pos.y = below.y;
         velocityY.current = 0;
         ninjaJumpUsed.current = false;
         world.ember.pushUntil = Math.min(world.ember.pushUntil, now); // a rescue ends on landing
         // Reaching a glowing checkpoint block saves your progress
         if (below.piece.checkpoint) {
-          checkpoint.current = { x: below.piece.x + widthOf(below.piece) / 2, y: below.y };
+          const x = below.piece.x + widthOf(below.piece) / 2;
+          if (x !== checkpoint.current.x) play('checkpoint', { volume: 0.6 }); // a new checkpoint reached
+          checkpoint.current = { x, y: below.y };
         }
       } else {
         pos.y = nextY;
+      }
+    }
+
+    // Walking on the bridges: the broken rope bridge creaks, the leafy vine bridge rustles
+    if (grounded && dx !== 0 && now >= nextStepSound.current) {
+      const surface = floor.piece.art;
+      if (surface === art.ropeBridge) {
+        playAny(['bridge-creak-1', 'bridge-creak-2'], { volume: 0.35 });
+        nextStepSound.current = now + 0.7 + Math.random() * 0.5;
+      } else if (surface === art.vineBridge) {
+        playAny(['leaf-rustle-1', 'leaf-rustle-2'], { volume: 0.4 });
+        nextStepSound.current = now + 0.3 + Math.random() * 0.2;
       }
     }
 
@@ -191,8 +238,9 @@ export function Ninja() {
       pose = RUN_CYCLE[Math.floor(now * RUN_FPS) % RUN_CYCLE.length];
     }
 
-    if (pose !== lookRef.current.pose || facing !== lookRef.current.facing) {
-      lookRef.current = { facing, pose };
+    const line = ending ? lineFor('ninja', since) : '';
+    if (pose !== lookRef.current.pose || facing !== lookRef.current.facing || line !== lookRef.current.line) {
+      lookRef.current = { facing, line, pose };
       setLook(lookRef.current);
     }
   });
@@ -202,6 +250,17 @@ export function Ninja() {
       <group scale={[look.facing, 1, 1]}>
         <GameSprite art={poses[look.pose]} />
       </group>
+      {look.line && (
+        <Html position={[0, 2.1, 0]} zIndexRange={[20, 0]}>
+          {/* The ninja's speech bubble: teal border, like his scarf */}
+          <div className="pointer-events-none relative -translate-x-1/2 -translate-y-full pb-3">
+            <div className="relative w-56 rounded-md border-[3px] border-cyan-400 bg-[#0b1620] px-3 py-2 text-center font-pixel text-[9px] leading-4 text-cyan-50 shadow-[0_0_0_2px_#000]">
+              {look.line}
+              <div className="absolute -bottom-[9px] left-1/2 h-3 w-3 -translate-x-1/2 rotate-45 border-b-[3px] border-r-[3px] border-cyan-400 bg-[#0b1620]" />
+            </div>
+          </div>
+        </Html>
+      )}
     </group>
   );
 }

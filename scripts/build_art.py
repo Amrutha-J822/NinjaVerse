@@ -33,6 +33,7 @@ FILES = {
     4: "concept-4-stepping-stones.webp",
     5: "concept-5-stone-path.webp",
     6: "concept-6-burning-vines.webp",
+    8: "concept-8-journey-continues.webp",
 }
 PICS = {n: np.asarray(Image.open(os.path.join(CONCEPTS, f)).convert("RGB")) for n, f in FILES.items()}
 ALIGNED = (1, 2, 3, 5)  # these four share exactly the same framing; picture 4 is framed differently
@@ -330,6 +331,105 @@ def build_platforms():
     return out
 
 
+# --- the ending: the highest rooftop and its giant lantern ----------------------
+
+# Picture 8, the ending: the lantern rooftop (left part), as boxes in picture pixels
+LANTERN_BOX = (110, 20, 930, 770)
+LANTERN_INSIDE = (100, 150, 350, 420)  # the lantern's glowing middle, in cut-out pixels
+LANTERN_DECK = 589  # cut-out row of the rooftop's walkway (where the ninja stands in the picture)
+LANTERN_BASE = 425  # cut-out row of the raised stone base the lantern stands on
+ROOF_EXTRA = 240  # rows of roof tiles added at the bottom so the building reaches down out of view
+
+
+def build_lantern_roof():
+    """The highest rooftop with the giant lantern, flipped so the ninja arrives from the left.
+
+    Ember (inside the lantern) and its trail are covered by mirroring the lantern's left half,
+    the ninja and the speech bubbles are cut away with the sky, and a dormant copy is made
+    with the lantern dark, for before Ember lights it."""
+    pic = PICS[8].copy()
+    for x in range(334, 565):
+        pic[150:458, x] = pic[150:458, 668 - x]
+    pic = cv2.inpaint(pic, _rect_mask(pic.shape, (310, 350, 358, 368)), 3, cv2.INPAINT_TELEA)  # mirrored smile
+    X0, Y0, X1, Y1 = LANTERN_BOX
+    img = pic[Y0:Y1, X0:X1].copy()
+    h, w = img.shape[:2]
+    mask = np.full((h, w), cv2.GC_PR_BGD, np.uint8)
+
+    def box(m, x0, y0, x1, y1, v):  # picture coordinates
+        m[y0 - Y0 : y1 - Y0, x0 - X0 : x1 - X0] = v
+
+    box(mask, 210, 40, 450, 440, cv2.GC_FGD)  # lantern
+    box(mask, 170, 440, 515, 600, cv2.GC_FGD)  # its stone base
+    box(mask, 110, 610, 930, 770, cv2.GC_FGD)  # the rooftop
+    box(mask, 600, 20, 930, 500, cv2.GC_BGD)  # sky
+    box(mask, 545, 20, 930, 270, cv2.GC_BGD)  # sky and Ember's speech bubble
+    box(mask, 552, 380, 728, 598, cv2.GC_BGD)  # where the ninja stands
+    box(mask, 110, 20, 135, 200, cv2.GC_BGD)
+    fg = largest_piece(grabcut(img, mask))
+    a = np.dstack([img, fg * 255]).astype(np.uint8)
+    box(a[..., 3], 805, 470, 930, 572, 0)  # a pagoda in the distance
+
+    def sky_or_city(rgb):
+        r, g, b = rgb[..., 0], rgb[..., 1], rgb[..., 2]
+        return (b > r + 30) & (b > g + 30) & (rgb.sum(-1) > 60)
+
+    a = strip_outside(a, sky_or_city)
+    alpha = a[..., 3]
+    # Bits of the city still showing between the lanterns and the stone base
+    for y0, y1, x0, x1 in ((530, 573, 683, w), (573, 593, 690, w), (0, h, 700, w), (440, 483, 0, 25),
+                           (385, 426, 62, 96), (380, 428, 350, 383), (436, 460, 360, 372)):
+        alpha[y0:y1, x0:x1] = 0
+    # Roof tiles continue down out of view
+    tiles = a[-80:-20]
+    a = np.vstack([a] + [tiles] * (ROOF_EXTRA // len(tiles)))
+
+    dormant = a.copy()
+    x0, y0, x1, y1 = LANTERN_INSIDE
+    inside = dormant[y0:y1, x0:x1, :3].astype(float)
+    lum = inside.mean(2, keepdims=True)
+    glowing = (inside[..., :1] > 150) & (inside[..., :1] > inside[..., 2:3] + 40)
+    unlit = lum * np.array([0.22, 0.22, 0.32]) + np.array([14, 14, 26])  # dark glass and cold stone
+    dormant[y0:y1, x0:x1, :3] = np.where(glowing, unlit, inside * 0.55).clip(0, 255).astype(np.uint8)
+    flip = lambda im: crop(im[:, ::-1].copy())
+    return {"lantern-roof": flip(a), "lantern-roof-dormant": flip(dormant)}
+
+
+def _rect_mask(shape, rect):
+    x0, y0, x1, y1 = rect
+    m = np.zeros(shape[:2], np.uint8)
+    m[y0:y1, x0:x1] = 255
+    return m
+
+
+def build_dawn(night):
+    """The same city at sunrise: the sky warms from violet to orange toward the skyline,
+    the clouds catch the light, the moon becomes a rising sun and the windows glow brighter.
+    Colors are stepped so it stays pixel art."""
+    img = night.astype(float)
+    h, w = img.shape[:2]
+    lum = img.mean(2, keepdims=True)
+    stops = [(0, (70, 45, 130)), (120, (180, 80, 130)), (230, (255, 140, 70)), (330, (255, 170, 90)), (h, (90, 60, 90))]
+    ys = np.arange(h)
+    grad = np.stack([np.interp(ys, [y for y, _ in stops], [c[i] for _, c in stops]) for i in range(3)], 1)[:, None, :]
+    strength = np.interp(ys, [0, 300, 470, h], [0.85, 0.7, 0.35, 0.45])[:, None, None]
+    warm = grad * (0.35 + lum / 255 * 1.7)
+    out = img * (1 - strength) + warm * strength
+    # The moon becomes the sun, with a stepped glow around it
+    cy, cx = np.mgrid[0:h, 0:w]
+    d = np.hypot(cx - 1035, cy - 105)
+    disc = (d < 82) & (night.sum(2) > 450)
+    out[disc] = np.array([255, 224, 120])
+    ring = np.floor(np.clip(1 - (d - 80) / 150, 0, 1) * 3) / 3
+    out += ring[..., None] * np.array([60, 35, 0]) * (~disc)[..., None]
+    # Windows and lanterns glow brighter
+    r, g, b = night[..., 0].astype(int), night[..., 1].astype(int), night[..., 2].astype(int)
+    lit = (r > 150) & (g > 90) & (b < 140) & ~disc
+    out[lit] = np.minimum(255, img[lit] * 1.25 + 20)
+    out = np.floor(out.clip(0, 255) / 6) * 6  # fewer, stepped colors
+    return out.astype(np.uint8)
+
+
 # --- background ---------------------------------------------------------------
 
 CHARACTER_BOXES = {
@@ -411,6 +511,10 @@ def surfaces(name, a):
         return flat_deck(alpha, BEAM_TOP)  # the top of the charred beam
     if name == "vine-beam":
         return [None for _ in range(0, w, COLUMN)]  # nothing to stand on while it is overgrown
+    if name.startswith("lantern-roof"):
+        # The walkway, and the lantern's raised stone base (standing up from the walkway like a wall)
+        base_from = w - 445  # the flipped cut-out: the base starts here
+        return [int(h - (LANTERN_BASE if c >= base_from else LANTERN_DECK)) for c in range(0, w, COLUMN)]
     if name in ("roof-left", "roof-right", "roof-shrine"):
         return flat_deck(alpha, ledge_row(alpha))
     if name == "swing":
@@ -474,8 +578,10 @@ def camel(name):
 
 def main():
     os.makedirs(OUT_PNG, exist_ok=True)
-    sprites = {**build_characters(), **build_platforms()}
-    Image.fromarray(build_background()).save(os.path.join(OUT_PNG, "background.png"))
+    sprites = {**build_characters(), **build_platforms(), **build_lantern_roof()}
+    night = build_background()
+    Image.fromarray(night).save(os.path.join(OUT_PNG, "background.png"))
+    Image.fromarray(build_dawn(night)).save(os.path.join(OUT_PNG, "background-dawn.png"))
     for name, a in sprites.items():
         Image.fromarray(a, "RGBA").save(os.path.join(OUT_PNG, f"{name}.png"))
 
@@ -484,6 +590,7 @@ def main():
         "// Sizes are in image pixels; surfaces are walkable heights (from the sprite's bottom)",
         f"// every {COLUMN} pixels across, or null where there is nothing to stand on.",
         "import background from '../assets/game/background.png';",
+        "import backgroundDawn from '../assets/game/background-dawn.png';",
     ]
     for name in sprites:
         lines.append(f"import {camel(name)} from '../assets/game/{name}.png';")
@@ -493,6 +600,7 @@ def main():
         f"export const SURFACE_COLUMN = {COLUMN};",
         "",
         f"export const backgroundArt = {{ height: {bg.height}, src: background, width: {bg.width} }};",
+        f"export const backgroundDawnArt = {{ height: {bg.height}, src: backgroundDawn, width: {bg.width} }};",
         "",
         "export const art = {",
     ]

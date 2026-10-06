@@ -1,16 +1,36 @@
 import React, { useMemo, useRef, useState } from 'react';
-import { Group, ShaderMaterial } from 'three';
+import { Group, MeshBasicMaterial, ShaderMaterial } from 'three';
 
 import { useFrame, useThree } from '@react-three/fiber';
 
-import { art, backgroundArt } from '../game/art';
-import { DARK_ZONE, level, LEVEL_WIDTH, Piece, pieceState, PX, triggeredFor, vineState, widthOf } from '../game/level';
+import { art, backgroundArt, backgroundDawnArt, SURFACE_COLUMN } from '../game/art';
+import { dawn, endingTime, LANTERN, lightWave, T } from '../game/ending';
+import {
+  DARK_ZONE,
+  highestRoof,
+  level,
+  LEVEL_WIDTH,
+  Piece,
+  pieceState,
+  PX,
+  triggeredFor,
+  vineState,
+  widthOf
+} from '../game/level';
 import { world } from '../game/world';
 
 import { BridgeFire, Debris, Glow, Wind } from './Effects';
 import { GameSprite, textureFor } from './GameSprite';
 
 const background = { ...backgroundArt, originX: backgroundArt.width / 2 };
+const dawnArt = backgroundDawnArt;
+const dawnMaterial = new MeshBasicMaterial({
+  depthWrite: false,
+  map: textureFor(backgroundDawnArt.src),
+  opacity: 0,
+  toneMapped: false,
+  transparent: true
+});
 
 /**
  * The night city behind everything. It stays with the camera, scaled to cover the
@@ -31,11 +51,17 @@ function Background() {
     const progress = Math.min(1, Math.max(0, world.player.x / LEVEL_WIDTH));
     group.scale.setScalar(scale);
     group.position.set(camera.position.x + spare * (0.5 - progress), camera.position.y, -50);
+    const since = endingTime(world.time);
+    dawnMaterial.opacity = since === null ? 0 : dawn(since);
   });
 
   return (
     <group ref={ref}>
-      <GameSprite art={background} anchor="center" />
+      <GameSprite art={background} anchor="center" shaded={false} />
+      {/* Sunrise over the same city, fading in at the end of the journey */}
+      <mesh position={[0, 0, 0.01]} material={dawnMaterial}>
+        <planeGeometry args={[dawnArt.width * PX, dawnArt.height * PX]} />
+      </mesh>
     </group>
   );
 }
@@ -170,6 +196,90 @@ function OvergrownBridge({ piece }: { piece: Piece }) {
   );
 }
 
+/**
+ * The highest rooftop and its giant lantern: dark until Ember floats in and lights it.
+ * It flickers on, a burst of light spreads out, and then it glows steadily.
+ */
+function LanternRoof({ piece }: { piece: Piece }) {
+  const lit = useRef<Group>(null);
+  const glow = useRef<Group>(null);
+  const burst = useRef<Group>(null);
+  const restX = piece.x + piece.art.originX * PX;
+  useFrame(() => {
+    const since = endingTime(world.time);
+    const after = since === null ? -1 : since - T.ignite;
+    const on = after >= 0 && (after > 0.5 || Math.floor(after * 12) % 2 === 0); // flickers, then stays lit
+    if (lit.current) lit.current.visible = on;
+    if (glow.current) {
+      glow.current.visible = on;
+      glow.current.scale.setScalar(Math.min(1, after / 0.6) * (1 + Math.sin(world.time * 3) * 0.05));
+    }
+    if (burst.current) {
+      burst.current.visible = after >= 0 && after < 1;
+      burst.current.scale.setScalar(1 + after * 5);
+    }
+  });
+  const lantern: [number, number, number] = [LANTERN.x - restX, LANTERN.y - piece.y, 0.3];
+  return (
+    <group position={[restX, piece.y, 0]}>
+      <GameSprite art={art.lanternRoofDormant} />
+      <group ref={lit} position={[0, 0, 0.01]} visible={false}>
+        <GameSprite art={art.lanternRoof} />
+      </group>
+      <group ref={glow} position={lantern} visible={false}>
+        <Glow color="#ffb040" size={5} />
+      </group>
+      <group ref={burst} position={lantern} visible={false}>
+        <Glow color="#ffd070" size={2} />
+      </group>
+    </group>
+  );
+}
+
+// Little lights along every rooftop path: they come on one after another, running back from
+// the lantern to the start once Ember lights it. Moving and vanishing platforms get none.
+const LIGHT_EVERY = 6; // surface columns between lights
+const pathLights = level.flatMap((piece) => {
+  const kind = piece.motion?.kind;
+  if (kind === 'drift' || kind === 'false' || kind === 'flame') return [];
+  const surfaces = piece.overgrown ? art.vineBeamBurnt.surfaces : piece.art.surfaces;
+  const column = SURFACE_COLUMN * PX;
+  return surfaces.flatMap((surface, c) =>
+    surface === null || c % LIGHT_EVERY !== 3
+      ? []
+      : [{ x: piece.x + (c + 0.5) * column, y: piece.y + surface * PX + 0.12 }]
+  );
+});
+
+function PathLights() {
+  const group = useRef<Group>(null);
+  useFrame(() => {
+    const g = group.current;
+    if (!g) return;
+    const since = endingTime(world.time);
+    const front = since === null ? Infinity : LANTERN.x - lightWave(since) * LANTERN.x;
+    g.children.forEach((child, i) => {
+      const light = child;
+      const age = (pathLights[i].x - front) / 1.5; // pops in as the light reaches it
+      light.visible = age > 0;
+      light.scale.setScalar(Math.min(1, 0.3 + age) * (1 + Math.sin(world.time * 5 + i) * 0.08));
+    });
+  });
+  return (
+    <group ref={group}>
+      {pathLights.map(({ x, y }) => (
+        <group key={`${x},${y}`} position={[x, y, 0.6]} visible={false}>
+          <Glow color="#ffa040" size={0.8} />
+          <mesh>
+            <planeGeometry args={[0.1, 0.12]} />
+            <meshBasicMaterial color="#ffd27a" toneMapped={false} />
+          </mesh>
+        </group>
+      ))}
+    </group>
+  );
+}
+
 const LIGHT_RADIUS = 3; // how far the fireball's light reaches
 const BRIGHT_RADIUS = 5; // while Ember's LIGHT_AREA is on
 const NINJA_GLOW = 1.6; // a small glow around the ninja so his footing is always visible
@@ -230,7 +340,9 @@ function Darkness() {
     material.uniforms.uLight.value = [world.fireball.x, world.fireball.y];
     material.uniforms.uNinja.value = [world.player.x, world.player.y + 0.9];
     material.uniforms.uRadius.value = bright ? BRIGHT_RADIUS : LIGHT_RADIUS;
-    material.uniforms.uDarkness.value = bright ? DARKNESS * 0.7 : DARKNESS;
+    const since = endingTime(world.time);
+    const lift = since === null ? 1 : 1 - dawn(since); // the dark stretch brightens at sunrise
+    material.uniforms.uDarkness.value = (bright ? DARKNESS * 0.7 : DARKNESS) * lift;
   });
   return (
     <mesh position={[(DARK_ZONE.x0 + DARK_ZONE.x1) / 2, 0, 0.5]} material={material}>
@@ -239,20 +351,24 @@ function Darkness() {
   );
 }
 
-/** Background, every platform, bridge and rooftop, and the dark stretch. */
+/** One platform, bridge or rooftop. */
+function AnyPiece({ piece }: { piece: Piece }) {
+  if (piece.overgrown) return <OvergrownBridge piece={piece} />;
+  if (piece === highestRoof) return <LanternRoof piece={piece} />;
+  return <LevelPiece piece={piece} />;
+}
+
+/** Background, every platform, bridge and rooftop, the dark stretch, and the path lights. */
 export function Environment() {
   return (
     <>
       <Background />
       {level
         .filter((piece) => piece.motion?.kind !== 'flame') // the flame steps are drawn with the flame path
-        .map((piece) =>
-          piece.overgrown ? (
-            <OvergrownBridge key={piece.id} piece={piece} />
-          ) : (
-            <LevelPiece key={piece.id} piece={piece} />
-          )
-        )}
+        .map((piece) => (
+          <AnyPiece key={piece.id} piece={piece} />
+        ))}
+      <PathLights />
       <Darkness />
       <Wind />
     </>
