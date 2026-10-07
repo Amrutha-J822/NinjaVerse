@@ -286,6 +286,12 @@ export default function GameScene() {
   useEffect(() => {
     if (chatting) return undefined;
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Toggle AI control first
+      if (e.key === AI_CONTROL_TOGGLE_KEY) {
+        e.preventDefault();
+        return;
+      }
+
       if (gameKeys.has(e.key)) {
         // Stop the arrows from scrolling the page or pressing a focused button
         e.preventDefault();
@@ -298,6 +304,8 @@ export default function GameScene() {
         setChatting(true);
       }
     };
+
+    window.addEventListener('keydown', toggleAI);
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [chatting, paused]);
