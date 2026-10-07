@@ -66,9 +66,8 @@ export default function NemotronChat() {
 
   const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
-  const [gameActive, setGameActive] = useState(false);
-  const gameIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  const [currentCombo, setCurrentCombo] = useState<string>("");
+  const [engineReady, setEngineReady] = useState(false);
+
 
   // ------------------------------------------------------------
   // AUTO LOAD MODEL & GAME LOOP
@@ -78,13 +77,7 @@ export default function NemotronChat() {
     // Auto‑load model on mount
     void initialize();
 
-    return () => {
-      // Cleanup interval on unmount
-      if (gameIntervalRef.current) {
-        clearInterval(gameIntervalRef.current);
-        gameIntervalRef.current = null;
-      }
-    };
+    return;
   }, []);
 
   // ------------------------------------------------------------
@@ -126,17 +119,12 @@ export default function NemotronChat() {
       );
 
       engineRef.current = engine;
+      setEngineReady(true);
 
       setStatus("Ready");
       setProgress("Nemotron is ready.");
 
       console.log("Nemotron engine initialized:", engine);
-
-      // Start game loop once model is ready
-      setGameActive(true);
-      gameIntervalRef.current = setInterval(() => {
-        void sendGamePrompt();
-      }, 3000); // every 3 seconds
     } catch (error) {
       console.error(error);
 
@@ -151,6 +139,13 @@ export default function NemotronChat() {
       setLoading(false);
     }
   };
+
+  // Auto-load model on mount
+  useEffect(() => {
+    void initialize();
+
+    return;
+  }, []);
 
   // ------------------------------------------------------------
   // SEND MESSAGE (chat)
@@ -261,51 +256,6 @@ export default function NemotronChat() {
   };
 
   // ------------------------------------------------------------
-  // SEND GAME PROMPT (non‑chat)
-  // ------------------------------------------------------------
-
-  const sendGamePrompt = async () => {
-    const engine = engineRef.current;
-    if (!engine) return;
-
-    // Ask model for a simple key combo
-    const prompt = "Give me a single key combo for a Spider‑Man game, e.g. ArrowUp,ArrowRight,Space. Reply with only the combo.";
-
-    try {
-      const stream =
-        await engine.chat.completions.create({
-          messages: [{ role: "user", content: prompt }],
-          temperature: 0.2,
-          top_p: 0.9,
-          max_tokens: 64,
-          stream: true,
-        });
-
-      let combo = "";
-      for await (const chunk of stream) {
-        const delta =
-          chunk.choices?.[0]?.delta?.content ?? "";
-        combo += delta;
-      }
-
-      combo = combo.trim();
-      if (combo) {
-        // In a real game we would dispatch key events here.
-        console.log("Received key combo:", combo);
-        // Optionally show in UI
-        setStatus(`Executing: ${combo}`);
-        // Simulate execution delay
-        setTimeout(() => {
-          setStatus("Ready");
-        }, 1000);
-      }
-    } catch (err) {
-      console.error("Game prompt error:", err);
-      setStatus("Game prompt failed");
-    }
-  };
-
-  // ------------------------------------------------------------
   // KEYBOARD
   // ------------------------------------------------------------
 
@@ -341,345 +291,355 @@ export default function NemotronChat() {
   // ------------------------------------------------------------
 
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        background: "#0b0b0f",
-        color: "#fff",
-        display: "flex",
-        flexDirection: "column",
-        fontFamily:
-          "Inter, system-ui, sans-serif",
+    <NemotronContext.Provider
+      value={{
+        engine: engineRef.current,
+        status,
+        progress,
+        progressPercent,
+        loading,
+        generating,
       }}
     >
-      {/* Header */}
-
-      <header
+      <div
         style={{
-          borderBottom:
-            "1px solid #292932",
-          padding: "16px 24px",
+          minHeight: "100vh",
+          background: "#0b0b0f",
+          color: "#fff",
           display: "flex",
-          alignItems: "center",
-          justifyContent:
-            "space-between",
+          flexDirection: "column",
+          fontFamily: "Inter, system-ui, sans-serif",
         }}
       >
-        <div>
-          <div
-            style={{
-              fontSize: 20,
-              fontWeight: 600,
-            }}
-          >
-            Nemotron Mini 4B
-          </div>
+        {/* Header */}
 
-          <div
-            style={{
-              color: "#888",
-              fontSize: 13,
-              marginTop: 4,
-            }}
-          >
-            Local WebGPU inference
-          </div>
-        </div>
-
-        <div
+        <header
           style={{
+            borderBottom:
+              "1px solid #292932",
+            padding: "16px 24px",
             display: "flex",
             alignItems: "center",
-            gap: 12,
+            justifyContent:
+              "space-between",
           }}
         >
-          <div
-            style={{
-              color:
-                status === "Ready"
-                  ? "#4ade80"
-                  : "#aaa",
-              fontSize: 13,
-            }}
-          >
-            ● {status}
+          <div>
+            <div
+              style={{
+                fontSize: 20,
+                fontWeight: 600,
+              }}
+            >
+              Nemotron Mini 4B
+            </div>
+
+            <div
+              style={{
+                color: "#888",
+                fontSize: 13,
+                marginTop: 4,
+              }}
+            >
+              Local WebGPU inference
+            </div>
           </div>
 
-          {messages.length > 0 && (
-            <button
-              onClick={clearChat}
-              disabled={generating}
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 12,
+            }}
+          >
+            <div
               style={{
-                background: "#222229",
-                border: "1px solid #383842",
-                color: "#ccc",
+                color:
+                  status === "Ready"
+                    ? "#4ade80"
+                    : "#aaa",
+                fontSize: 13,
+              }}
+            >
+              ● {status}
+            </div>
+
+            {messages.length > 0 && (
+              <button
+                onClick={clearChat}
+                disabled={generating}
+                style={{
+                  background: "#222229",
+                  border: "1px solid #383842",
+                  color: "#ccc",
+                  padding:
+                    "7px 12px",
+                  borderRadius: 6,
+                  cursor: generating
+                    ? "default"
+                    : "pointer",
+                }}
+              >
+                Clear
+              </button>
+            )}
+          </div>
+        </header>
+
+        {/* Loading */}
+
+        {!engineRef.current && (
+          <div
+            style={{
+              padding: 24,
+              textAlign: "center",
+              borderBottom:
+                "1px solid #202027",
+            }}
+          >
+            <button
+              onClick={() => void initialize()}
+              disabled={loading}
+              style={{
+                background:
+                  loading
+                    ? "#333"
+                    : "#2563eb",
+                color: "#fff",
+                border: "none",
+                borderRadius: 8,
                 padding:
-                  "7px 12px",
-                borderRadius: 6,
-                cursor: generating
+                  "12px 24px",
+                fontSize: 15,
+                cursor: loading
                   ? "default"
                   : "pointer",
               }}
             >
-              Clear
+              {loading
+                ? "Loading model..."
+                : "Load Nemotron"}
             </button>
-          )}
-        </div>
-      </header>
 
-      {/* Loading */}
-
-      {!engineRef.current && (
-        <div
-          style={{
-            padding: 24,
-            textAlign: "center",
-            borderBottom:
-              "1px solid #202027",
-          }}
-        >
-          <button
-            onClick={() => void initialize()}
-            disabled={loading}
-            style={{
-              background:
-                loading
-                  ? "#333"
-                  : "#2563eb",
-              color: "#fff",
-              border: "none",
-              borderRadius: 8,
-              padding:
-                "12px 24px",
-              fontSize: 15,
-              cursor: loading
-                ? "default"
-                : "pointer",
-            }}
-          >
-            {loading
-              ? "Loading model..."
-              : "Load Nemotron"}
-          </button>
-
-          {progress && (
-            <div
-              style={{
-                marginTop: 12,
-                color: "#888",
-                fontSize: 13,
-              }}
-            >
-              {progress}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Chat */}
-
-      <main
-        style={{
-          flex: 1,
-          overflowY: "auto",
-          padding: "32px 16px",
-        }}
-      >
-        <div
-          style={{
-            maxWidth: 850,
-            margin: "0 auto",
-          }}
-        >
-          {messages.length === 0 && (
-            <div
-              style={{
-                textAlign: "center",
-                marginTop: 100,
-                color: "#666",
-              }}
-            >
+            {progress && (
               <div
                 style={{
-                  fontSize: 28,
-                  marginBottom: 12,
-                  color: "#aaa",
+                  marginTop: 12,
+                  color: "#888",
+                  fontSize: 13,
                 }}
               >
-                Nemotron
+                {progress}
               </div>
+            )}
+          </div>
+        )}
 
-              <div>
-                Ask anything to start
-                chatting.
-              </div>
-            </div>
-          )}
+        {/* Chat */}
 
-          {messages.map(
-            (message, index) => (
+        <main
+          style={{
+            flex: 1,
+            overflowY: "auto",
+            padding: "32px 16px",
+          }}
+        >
+          <div
+            style={{
+              maxWidth: 850,
+              margin: "0 auto",
+            }}
+          >
+            {messages.length === 0 && (
               <div
-                key={index}
                 style={{
-                  display: "flex",
-                  justifyContent:
-                    message.role ===
-                    "user"
-                      ? "flex-end"
-                      : "flex-start",
-                  marginBottom: 20,
+                  textAlign: "center",
+                  marginTop: 100,
+                  color: "#666",
                 }}
               >
                 <div
                   style={{
-                    maxWidth: "80%",
-                    background:
-                      message.role ===
-                      "user"
-                        ? "#2563eb"
-                        : "#1b1b22",
-                    border:
-                      message.role ===
-                      "assistant"
-                        ? "1px solid #2a2a34"
-                        : "none",
-                    borderRadius: 12,
-                    padding:
-                      "12px 16px",
-                    lineHeight: 1.6,
-                    whiteSpace:
-                      "pre-wrap",
-                    overflowWrap:
-                      "break-word",
+                    fontSize: 28,
+                    marginBottom: 12,
+                    color: "#aaa",
                   }}
                 >
-                  {message.content ||
-                    (generating &&
-                    message.role ===
-                      "assistant"
-                        ? "..."
-                        : "")}
+                  Nemotron
+                </div>
+
+                <div>
+                  Ask anything to start
+                  chatting.
                 </div>
               </div>
-            )
-          )}
+            )}
 
-          {generating && (
-            <div
-              style={{
-                color: "#666",
-                fontSize: 12,
-                marginTop: 8,
-              }}
-            >
-              Nemotron is generating...
-            </div>
-          )}
-        </div>
-      </main>
+            {messages.map(
+              (message, index) => (
+                <div
+                  key={index}
+                  style={{
+                    display: "flex",
+                    justifyContent:
+                      message.role ===
+                      "user"
+                        ? "flex-end"
+                        : "flex-start",
+                    marginBottom: 20,
+                  }}
+                >
+                  <div
+                    style={{
+                      maxWidth: "80%",
+                      background:
+                        message.role ===
+                        "user"
+                          ? "#2563eb"
+                          : "#1b1b22",
+                      border:
+                        message.role ===
+                        "assistant"
+                          ? "1px solid #2a2a34"
+                          : "none",
+                      borderRadius: 12,
+                      padding:
+                        "12px 16px",
+                      lineHeight: 1.6,
+                      whiteSpace:
+                        "pre-wrap",
+                      overflowWrap:
+                        "break-word",
+                    }}
+                  >
+                    {message.content ||
+                      (generating &&
+                      message.role ===
+                        "assistant"
+                          ? "..."
+                          : "")}
+                  </div>
+                </div>
+              )
+            )}
 
-      {/* Input */}
+            {generating && (
+              <div
+                style={{
+                  color: "#666",
+                  fontSize: 12,
+                  marginTop: 8,
+                }}
+              >
+                Nemotron is generating...
+              </div>
+            )}
+          </div>
+        </main>
 
-      <footer
-        style={{
-          borderTop:
-            "1px solid #292932",
-          padding: 16,
-          background: "#0b0b0f",
-        }}
-      >
-        <div
+        {/* Input */}
+
+        <footer
           style={{
-            maxWidth: 850,
-            margin: "0 auto",
-            display: "flex",
-            gap: 10,
-            alignItems: "flex-end",
+            borderTop:
+              "1px solid #292932",
+            padding: 16,
+            background: "#0b0b0f",
           }}
         >
-          <textarea
-            value={input}
-            onChange={(event) =>
-              setInput(
-                event.target.value
-              )
-            }
-            onKeyDown={handleKeyDown}
-            disabled={
-              !engineRef.current ||
-              generating
-            }
-            placeholder={
-              engineRef.current
-                ? "Message Nemotron..."
-                : "Load the model first..."
-            }
-            rows={3}
+          <div
             style={{
-              flex: 1,
-              resize: "none",
-              background: "#17171d",
-              color: "#fff",
-              border:
-                "1px solid #30303a",
-              borderRadius: 10,
-              padding: 12,
-              fontSize: 15,
-              outline: "none",
-              fontFamily:
-                "inherit",
-            }}
-          />
-
-          <button
-            onClick={() =>
-              void sendMessage()
-            }
-            disabled={
-              !engineRef.current ||
-              generating ||
-              !input.trim()
-            }
-            style={{
-              background:
-                !engineRef.current ||
-                generating ||
-                !input.trim()
-                  ? "#333"
-                  : "#2563eb",
-              color: "#fff",
-              border: "none",
-              borderRadius: 10,
-              padding:
-                "12px 18px",
-              height: 48,
-              cursor:
-                !engineRef.current ||
-                generating ||
-                !input.trim()
-                  ? "default"
-                  : "pointer",
-              fontSize: 14,
+              maxWidth: 850,
+              margin: "0 auto",
+              display: "flex",
+              gap: 10,
+              alignItems: "flex-end",
             }}
           >
-            {generating
-              ? "..."
-              : "Send"}
-          </button>
-        </div>
+            <textarea
+              value={input}
+              onChange={(event) =>
+                setInput(
+                  event.target.value
+                )
+              }
+              onKeyDown={handleKeyDown}
+              disabled={
+                !engineRef.current ||
+                generating
+              }
+              placeholder={
+                engineRef.current
+                  ? "Message Nemotron..."
+                  : "Load the model first..."
+              }
+              rows={3}
+              style={{
+                flex: 1,
+                resize: "none",
+                background: "#17171d",
+                color: "#fff",
+                border:
+                  "1px solid #30303a",
+                borderRadius: 10,
+                padding: 12,
+                fontSize: 15,
+                outline: "none",
+                fontFamily:
+                  "inherit",
+              }}
+            />
 
-        <div
-          style={{
-            maxWidth: 850,
-            margin: "8px auto 0",
-            color: "#555",
-            fontSize: 11,
-          }}
-        >
-          Enter to send · Shift+Enter
-          for a new line
-        </div>
-      </footer>
-    </div>
+            <button
+              onClick={() =>
+                void sendMessage()
+              }
+              disabled={
+                !engineRef.current ||
+                generating ||
+                !input.trim()
+              }
+              style={{
+                background:
+                  !engineRef.current ||
+                  generating ||
+                  !input.trim()
+                    ? "#333"
+                    : "#2563eb",
+                color: "#fff",
+                border: "none",
+                borderRadius: 10,
+                padding:
+                  "12px 18px",
+                height: 48,
+                cursor:
+                  !engineRef.current ||
+                  generating ||
+                  !input.trim()
+                    ? "default"
+                    : "pointer",
+                fontSize: 14,
+              }}
+            >
+              {generating
+                ? "..."
+                : "Send"}
+            </button>
+          </div>
+
+          <div
+            style={{
+              maxWidth: 850,
+              margin: "8px auto 0",
+              color: "#555",
+              fontSize: 11,
+            }}
+          >
+            Enter to send · Shift+Enter
+            for a new line
+          </div>
+        </footer>
+      </div>
+    </NemotronContext.Provider>
   );
 }
