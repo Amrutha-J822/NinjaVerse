@@ -3,19 +3,11 @@
     windows_subsystem = "windows"
 )]
 
-mod decision_generator;
-
-#[tauri::command]
-fn jarvis_decision(level: String) -> String {
-    // Placeholder for Nemotron-Mini-4B-Instruct inference.
-    // Returns JSON with building coordinates, villain energy, attack, etc.
-    decision_generator::generate_decisions(&level)
-}
+mod ember;
 
 fn main() {
     tauri::Builder::default()
-        .plugin(tauri_plugin_process::init())
-        .invoke_handler(tauri::generate_handler![jarvis_decision])
+        .invoke_handler(tauri::generate_handler![ember::ember_chat])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

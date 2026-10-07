@@ -1,7 +1,15 @@
 import React, { useCallback } from 'react';
 import useSound from 'use-sound';
 
-import { SfxActions } from '../../views/Menus/MainMenu';
+import ButtonClickSFX from '../../assets/Sounds/Sfx/buttonClickSfx.mp3';
+import ButtonHoverSFX from '../../assets/Sounds/Sfx/buttonHoverSfx.mp3';
+
+export interface SfxActions {
+  onHoverSound?: string;
+  onClickSound?: string;
+}
+
+export const menuSfx = { onClickSound: ButtonClickSFX, onHoverSound: ButtonHoverSFX };
 
 type Props = {
   buttonLabel: string;

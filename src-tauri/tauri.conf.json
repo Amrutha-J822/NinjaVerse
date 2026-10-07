@@ -40,10 +40,10 @@
       }
     }
   },
-  "productName": "SpideyVerse",
-  "mainBinaryName": "SpideyVerse",
+  "productName": "Ninjaverse",
+  "mainBinaryName": "Ninjaverse",
   "version": "0.1.0",
-  "identifier": "com.spideyverse.app",
+  "identifier": "com.ninjaverse.app",
   "plugins": {},
   "app": {
     "windows": [
@@ -51,7 +51,7 @@
         "fullscreen": false,
         "height": 800,
         "resizable": true,
-        "title": "SpideyVerse",
+        "title": "Ninjaverse",
         "width": 1280,
         "useHttpsScheme": true
       }

@@ -1,16 +1,14 @@
 import React from 'react';
 import { Route, Routes } from 'react-router-dom';
 
-import SplashScreen from './components/SplashScreen';
-import MainMenu from './views/Menus/MainMenu';
-import PlayDemo from './views/PlayDemo';
+import GameScene from './views/Scenes/GameScene';
+import TitleScreen from './views/TitleScreen';
 
 function App() {
   return (
     <Routes>
-      <Route path="/" element={<SplashScreen />} />
-      <Route path="/main-menu" element={<MainMenu />} />
-      <Route path="/play-demo" element={<PlayDemo />} />
+      <Route path="/" element={<TitleScreen />} />
+      <Route path="/play" element={<GameScene />} />
     </Routes>
   );
 }

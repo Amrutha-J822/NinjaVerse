@@ -1,11 +1,11 @@
 [package]
-name = "spideyverse"
+name = "ninjaverse"
 version = "0.1.0"
-description = "SpideyVerse: a 3D Spider-Man game with a Jarvis AI director"
+description = "Ninjaverse: a pixel art action game"
 authors = ["you"]
 license = ""
 repository = ""
-default-run = "spideyverse"
+default-run = "ninjaverse"
 edition = "2021"
 rust-version = "1.77.2"
 
@@ -18,5 +18,5 @@ tauri-build = { version = "2", features = [] }
 serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"] }
 tauri = { version = "2", features = [] }
-tauri-plugin-process = "2"
+reqwest = { version = "0.12", default-features = false, features = ["json"] }
 
