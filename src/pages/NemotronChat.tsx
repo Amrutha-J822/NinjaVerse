@@ -1,36 +1,6 @@
 import React, { useRef, useState, useEffect, createContext } from "react";
-import {
-  CreateMLCEngine,
-  type MLCEngineInterface,
-  type InitProgressReport,
-} from "@mlc-ai/web-llm";
-
-const MODEL_ID = "Nemotron-Mini-4B-q4f16_1";
-
-const MODEL_URL = "/mlc/nemotron-mini-4b-q4f16_1";
-
-const MODEL_WASM =
-  "/mlc/nemotron-mini-4b-q4f16_1-webgpu.wasm";
-
-const appConfig = {
-  model_list: [
-    {
-      model: new URL(
-        "/mlc/nemotron-mini-4b-q4f16_1",
-        window.location.origin
-      ).toString(),
-      model_id: MODEL_ID,
-      model_lib: MODEL_WASM,
-
-      vram_required_MB: 2300,
-      low_resource_required: true,
-
-      overrides: {
-        context_window_size: 1000,
-      },
-    },
-  ],
-};
+import { type MLCEngineInterface } from "@mlc-ai/web-llm";
+import { getNemotronEngine } from "../utils/nemotronEngine";
 
 export const NemotronContext = createContext<{
   engine: MLCEngineInterface | null;
@@ -101,29 +71,24 @@ export default function NemotronChat() {
       setStatus("Loading Nemotron...");
       setProgress("");
 
-      const engine = await CreateMLCEngine(
-        MODEL_ID,
-        {
-          appConfig,
+      const engine = await getNemotronEngine((report) => {
+        console.log(report);
 
-          initProgressCallback: (
-            report: InitProgressReport
-          ) => {
-            console.log(report);
-
-            setProgress(
-              `${report.text} ${
-                report.progress !== undefined
-                  ? Math.round(report.progress * 100) + "%"
-                  : ""
-              }`
-            );
-            if (report.progress !== undefined) {
-              setProgressPercent(Math.round(report.progress * 100));
-            }
-          },
+        setProgress(
+          `${report.text} ${
+            report.progress !== undefined
+              ? Math.round(report.progress * 100) + "%"
+              : ""
+          }`
+        );
+        if (report.progress !== undefined) {
+          setProgressPercent(Math.round(report.progress * 100));
         }
-      );
+      });
+
+      if (!engine) {
+        throw new Error("The model could not load in this browser.");
+      }
 
       engineRef.current = engine;
 

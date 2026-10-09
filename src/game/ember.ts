@@ -1,5 +1,3 @@
-import { invoke, isTauri } from '@tauri-apps/api/core';
-
 import {
   burnVines,
   drawFlamePath,
@@ -21,15 +19,14 @@ import {
   WIND_ZONE
 } from './level';
 import { world } from './world';
+import { getNemotronEngine } from '../utils/nemotronEngine';
 
 /**
- * Ember, the fireball companion, talks through Nemotron-Mini-4B-Instruct running in Ollama.
+ * Ember, the fireball companion, talks through Nemotron Mini 4B running in the
+ * browser (WebGPU, through the shared engine in ../utils/nemotronEngine).
  * The model only suggests a reply and one action. This file checks the suggestion
  * against the real game state and carries out the action only if it is allowed.
  */
-
-export const MODEL = 'Nemotron-Mini-4B-Instruct';
-const OLLAMA_URL = 'http://localhost:11434/api/chat';
 
 export const ACTIONS = [
   'NO_ACTION',
@@ -339,29 +336,87 @@ export function execute(action: EmberAction) {
 // --- talking to the model ------------------------------------------------------
 
 const OFFLINE_REPLY =
-  "My fire brain isn't switched on yet! Ask your human to start Ollama with the Nemotron-Mini-4B-Instruct model, then talk to me again.";
+  "My fire brain isn't warmed up yet! The model loads in your browser — wait for the warming to finish, then talk to me again.";
 
-/** Send the system prompt and message to Ollama (through the desktop app when available). */
-async function askModel(userPrompt: string): Promise<string> {
-  if (isTauri()) {
-    return invoke<string>('ember_chat', { model: MODEL, system: SYSTEM_PROMPT, user: userPrompt });
-  }
-  const res = await fetch(OLLAMA_URL, {
-    body: JSON.stringify({
-      format: 'json',
+// Conversation memory: past turns are sent along so Ember can answer follow-ups.
+// Only the player's words and Ember's replies are kept, never the old game state.
+const history: Array<{ role: 'user' | 'assistant'; content: string }> = [];
+const HISTORY_MESSAGES = 6; // keep the last few exchanges
+
+/**
+ * Send a message to the Nemotron model and get a response incrementally.
+ * Uses the shared browser engine and remembers the last turns for follow-ups.
+ * Yields the answer-so-far each time more text arrives, so the UI can show it.
+ * @param userPrompt The full prompt: game state plus the player message.
+ * @param playerMessage The player's own words, kept in the history instead of the whole prompt.
+ */
+export async function* askModelStream(
+  userPrompt: string,
+  playerMessage: string = userPrompt
+): AsyncGenerator<string, void, unknown> {
+  try {
+    const engine = await getNemotronEngine();
+    if (!engine) {
+      yield OFFLINE_REPLY;
+      return;
+    }
+
+    const stream = await engine.chat.completions.create({
       messages: [
-        { content: SYSTEM_PROMPT, role: 'system' },
-        { content: userPrompt, role: 'user' }
+        { role: 'system', content: SYSTEM_PROMPT },
+        ...history.slice(-HISTORY_MESSAGES),
+        { role: 'user', content: userPrompt }
       ],
-      model: MODEL,
-      options: { num_predict: 100, temperature: 0.2 },
-      stream: false
-    }),
-    headers: { 'Content-Type': 'application/json' },
-    method: 'POST'
-  });
-  if (!res.ok) throw new Error(`Ollama answered ${res.status}`);
-  return (await res.json()).message.content as string;
+      temperature: 0.2,
+      top_p: 0.9,
+      max_tokens: 256,
+      stream: true
+    });
+
+    let responseText = '';
+    for await (const chunk of stream) {
+      const delta = chunk.choices?.[0]?.delta?.content ?? '';
+      responseText += delta;
+      yield responseText.trim();
+    }
+    yield responseText.trim();
+
+    history.push(
+      { role: 'user', content: playerMessage },
+      { role: 'assistant', content: responseText }
+    );
+    if (history.length > HISTORY_MESSAGES) {
+      history.splice(0, history.length - HISTORY_MESSAGES);
+    }
+  } catch (error) {
+    console.error('Ember model error:', error);
+    yield OFFLINE_REPLY;
+  }
+}
+
+/** Pull the "reply" field out of JSON that is still being generated, for showing words as they come. */
+export function replySoFar(text: string): string {
+  const found = /"reply"\s*:\s*"((?:[^"\\]|\\.)*)/.exec(text);
+  if (!found) return '';
+  const fragment = found[1];
+  try {
+    return JSON.parse(`"${fragment}"`);
+  } catch {
+    return fragment; // cut off mid-escape; good enough for the dialog
+  }
+}
+
+/**
+ * Send a message to the Nemotron model and get a response.
+ * Uses the browser's WebGPU-accelerated model.
+ * Returns the full response string (backward-compatible).
+ */
+async function askModel(userPrompt: string): Promise<string> {
+  const responses: string[] = [];
+  for await (const chunk of askModelStream(userPrompt)) {
+    responses.push(chunk);
+  }
+  return responses[responses.length - 1];
 }
 
 /** Pull the JSON object out of the model's text and keep only allowed values. */
@@ -380,11 +435,17 @@ function parse(text: string): Omit<EmberAnswer, 'done'> {
   return { action: category === 'UNRELATED' ? 'NO_ACTION' : action, category, reply, urgency };
 }
 
-/** Ask Ember something. The game state is captured now, while the game is paused. */
-export async function askEmber(message: string): Promise<EmberAnswer> {
+/**
+ * Ask Ember something. The game state is captured now, while the game is paused.
+ * @param onPartial Optional callback that gets Ember's reply-so-far as words arrive.
+ */
+export async function askEmber(
+  message: string,
+  onPartial?: (partialReply: string) => void
+): Promise<EmberAnswer> {
   const userPrompt = `Current game state:
 
-${JSON.stringify(gameState(), null, 2)}
+${JSON.stringify(gameState())}
 
 Player message:
 
@@ -392,7 +453,15 @@ ${JSON.stringify(message)}`;
 
   let answer: Omit<EmberAnswer, 'done'>;
   try {
-    answer = parse(await askModel(userPrompt));
+    let full = '';
+    for await (const chunk of askModelStream(userPrompt, message)) {
+      full = chunk;
+      if (onPartial) {
+        const soFar = replySoFar(chunk);
+        if (soFar) onPartial(soFar);
+      }
+    }
+    answer = parse(full);
   } catch {
     return {
       action: 'NO_ACTION',
