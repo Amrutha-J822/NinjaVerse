@@ -15,6 +15,7 @@ import { autoAssist } from '../../game/ember';
 import { endingTime, LANTERN, lightWave, LINES, resetEnding, silhouette, startEnding, T } from '../../game/ending';
 import { checkHints, resetHints } from '../../game/hints';
 import {
+  awaitLayout,
   burnFrontX,
   FINISH_X,
   flamePathState,
@@ -34,12 +35,15 @@ import PauseMenu from '../Menus/PauseMenu';
 
 const gameKeys = new Set(['ArrowLeft', 'ArrowRight', 'ArrowUp']);
 const VIEW_HEIGHT = 7; // world units visible top to bottom (the art's own scale)
+const LOOK_AHEAD = 0.22; // share of the screen the camera leads the ninja by, so the next ledge is well in view
 const WIDE_VIEW = 16; // pulled back over the city while the paths light up
 const CLOSING_VIEW = 9; // the closing silhouette shot
 
 /**
- * Flat 2D camera that follows the ninja along the level and up onto higher
- * platforms, without showing past either end of the level. In the ending it frames the
+ * Flat 2D camera that follows the ninja along the level, leading the view to the right so
+ * the next ledge is well on screen, and up onto higher platforms, without showing past
+ * either end of the level. In the ending it frames the lantern, pulls back to follow the
+ * light running along the paths, then comes back.
  * lantern, pulls back to follow the light running along the paths, then comes back.
  */
 function CameraRig() {
@@ -74,6 +78,7 @@ function CameraRig() {
     ortho.zoom = size.height / view.current;
     ortho.updateProjectionMatrix();
     const halfW = size.width / ortho.zoom / 2;
+    if (since === null) targetX += halfW * LOOK_AHEAD; // the route only runs right: keep the next ledge in view
     targetX = Math.min(Math.max(targetX, halfW), Math.max(halfW, LEVEL_WIDTH - halfW));
     camera.position.x += (targetX - camera.position.x) * k;
     camera.position.y += (targetY - camera.position.y) * k;
@@ -266,10 +271,13 @@ export default function GameScene() {
 
   // Every game starts fresh: falling blocks back in place, Ember's abilities ready
   useEffect(() => {
-    resetLevel();
-    resetWorld();
-    resetHints();
-    resetEnding();
+    // Wait for the AI layout proposal (or its fallback) before each journey starts
+    awaitLayout().then(() => {
+      resetLevel();
+      resetWorld();
+      resetHints();
+      resetEnding();
+    });
   }, [journey]);
 
   const replay = () => {

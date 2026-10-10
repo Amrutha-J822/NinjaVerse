@@ -1,0 +1,5 @@
+function createCondensedGameStatePrompt(): string {
+  const state = gameState();
+  const { ninja, route, abilities } = state;
+  return `Ninja: x=${ninja.x}, y=${ninja.y}, grounded=${ninja.is_grounded}, falling=${ninja.is_falling}. Route: ${route.next_platform_type} dist=${route.next_platform_distance}px, dark=${route.is_dark}, safe=${route.next_platform_is_safe}, vines=${route.vines_blocking_route}, wind=${route.wind}. Abilities: burn=${abilities.burn_vines_available}, light=${abilities.light_area_available}, push=${abilities.push_toward_ledge_available}, slow=${abilities.slow_fall_available}, warn=${abilities.warn_available}.`;
+}

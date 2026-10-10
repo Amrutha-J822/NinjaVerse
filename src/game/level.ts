@@ -1,4 +1,5 @@
 import { art, SURFACE_COLUMN } from './art';
+import { LayoutPieceSpec, proposeLayout, lastAttempt, isClearable, placeOrder } from '../utils/levelAI';
 
 /** World units per image pixel: the art is shown at the same scale it was drawn. */
 export const PX = 0.01;
@@ -139,6 +140,154 @@ export const FINISH_X = 91.6; // landing on the highest rooftop
 export const LEVEL_WIDTH = 98;
 export const FALL_LIMIT = -10; // falling below this sends you back to the last checkpoint
 export const MAX_STEP = 0.35; // how far up or down he follows a surface while walking
+
+/**
+ * The AI-influenced layout: on each page load we ask Nebius for small nudges to the
+ * platforms and for a new order of the early sections (the rope bridge, the floating
+ * stone, the drifting stone, the rising plank and the crumbling blocks), and apply them
+ * only if they pass the jump-budget checks in levelAI. The handcrafted layout above is
+ * the fallback. Pieces stay the same objects (same ids), so every derived export keeps
+ * working; the anchors stay put because other modules snapshot their positions (START,
+ * FLAME_GAP, vineDeck, the ending's lantern), and the dark, vine, wind and flame
+ * sections stay pinned to their zones.
+ */
+
+/** How far each piece may be nudged [dxMin, dxMax, dyMin, dyMax], in the order of `level`. */
+const nudgability: [number, number, number, number][] = [
+  [0, 0, 0, 0], // start rooftop: START is fixed
+  [-0.5, 0.5, -0.2, 0.2], // rope bridge
+  [-0.8, 0.8, -0.4, 0.4], // floating stone
+  [-0.5, 0.5, -0.3, 0.3], // drifting stone
+  [-0.5, 0.5, -0.3, 0.3], // rising plank
+  [-0.3, 0.3, -0.3, 0.3], // crumbling block
+  [-0.3, 0.3, -0.3, 0.3], // crumbling block
+  [-0.3, 0.3, -0.3, 0.3], // crumbling block
+  [-0.3, 0.3, -0.2, 0.2], // glowing checkpoint block
+  [-0.3, 0.3, -0.2, 0.2], // swing
+  [-0.4, 0.4, -0.3, 0.3], // dark stretch (kept inside DARK_ZONE)
+  [-0.4, 0.4, -0.3, 0.3], // dark stretch
+  [-0.4, 0.4, -0.3, 0.3], // dark stretch (false platform)
+  [-0.4, 0.4, -0.3, 0.3], // dark stretch
+  [-0.4, 0.4, -0.3, 0.3], // dark stretch
+  [-0.3, 0.3, -0.2, 0.2], // glowing checkpoint block
+  [-0.4, 0.4, -0.2, 0.2], // rooftop before the vines
+  [-0.4, 0.4, 0, 0], // overgrown bridge: vineDeck is measured once, so it may only slide
+  [-0.3, 0.3, -0.2, 0.2], // shrine rooftop (checkpoint)
+  [-0.2, 0.4, -0.3, 0.3], // vine bridge (kept inside WIND_ZONE)
+  [0, 0, 0, 0], // rooftop whose edge is FLAME_GAP.x0 and height is FLAME_GAP.y
+  [-0.25, 0.25, -0.4, 0.4], // flame step (kept inside the flame gap)
+  [-0.25, 0.25, -0.4, 0.4], // flame step
+  [-0.25, 0.25, -0.4, 0.4], // flame step
+  [-0.25, 0.25, -0.4, 0.4], // flame step
+  [0, 0, 0, 0] // highest rooftop: the ending lights its lantern at a fixed spot
+];
+
+/** Indices of the sections the AI may put in a different order: everything between the start rooftop and the first checkpoint. */
+const shuffleable = [1, 2, 3, 4, 5, 6, 7];
+
+/** The walkable span of a piece's top and the height you stand on, at rest. */
+const walkOf = (piece: Piece) => {
+  let { surfaces } = piece.art;
+  if (piece.overgrown) surfaces = art.vineBeamBurnt.surfaces; // you walk on the beam once the vines burn
+  let first: number | null = null;
+  let last: number | null = null;
+  surfaces.forEach((s, i) => {
+    if (s !== null) {
+      if (first === null) first = i;
+      last = i;
+    }
+  });
+  if (first === null || last === null) return null;
+  return {
+    walkLeft: piece.x + first * SURFACE_COLUMN * PX,
+    walkRight: piece.x + (last + 1) * SURFACE_COLUMN * PX,
+    standY: piece.y + (surfaces.find((s) => s !== null) ?? 0) * PX
+  };
+};
+
+const specs: LayoutPieceSpec[] = level.map((piece, i) => {
+  const [dxMin, dxMax, dyMin, dyMax] = nudgability[i];
+  const walk = walkOf(piece) ?? {
+    walkLeft: piece.x,
+    walkRight: piece.x + widthOf(piece),
+    standY: standHeight(piece, 0)
+  };
+  const distance = piece.motion?.kind === 'drift' ? piece.motion.distance : 0;
+  return {
+    id: String(piece.id),
+    label: piece.label,
+    x: piece.x,
+    y: piece.y,
+    walkLeft: walk.walkLeft,
+    walkRight: walk.walkRight,
+    standY: walk.standY,
+    dxMin,
+    dxMax,
+    dyMin,
+    dyMax,
+    driftX: piece.motion?.kind === 'drift' && piece.motion.axis === 'x' ? distance : 0,
+    driftY: piece.motion?.kind === 'drift' && piece.motion.axis === 'y' ? distance : 0,
+    walkable: piece.motion?.kind !== 'false',
+    reorderable: shuffleable.includes(i)
+  };
+});
+
+/** What actually happened for this page load: 'ai' means the AI layout was applied. */
+export const layoutSource = { state: 'pending' };
+
+/**
+ * The layout for this page load: ask the AI, and move the pieces in place only if the
+ * proposal checks out. Await this before a journey starts (the handcrafted layout is
+ * already in place, so on any failure we simply never move anything).
+ */
+const layoutReady = (async () => {
+  const proposal = await proposeLayout(specs);
+  if (proposal === null) {
+    layoutSource.state = 'fallback';
+    console.info(`[levelAI] kept the handcrafted layout: ${lastAttempt.reason} (${lastAttempt.ms}ms, http ${lastAttempt.httpStatus})`);
+    return;
+  }
+  let at = new Map<string, { x: number; y: number }>();
+  specs.forEach((s) => {
+    const n = proposal.nudges.get(s.id) ?? { dx: 0, dy: 0 };
+    at.set(s.id, { x: s.x + n.dx, y: s.y + n.dy });
+  });
+  let shuffled = false;
+  if (proposal.order !== null) {
+    const placed = placeOrder(specs, proposal.order);
+    if (placed !== null) {
+      const shuffledAt = new Map(at);
+      placed.forEach((x, id) => {
+        const s = specs.find((q) => q.id === id) as LayoutPieceSpec;
+        const n = proposal.nudges.get(id) ?? { dx: 0, dy: 0 };
+        shuffledAt.set(id, { x: x + n.dx, y: s.y + n.dy });
+      });
+      if (isClearable(specs, shuffledAt)) {
+        at = shuffledAt;
+        shuffled = true;
+      } else {
+        console.info('[levelAI] dropped the proposed order: it asked for a jump the ninja cannot make');
+      }
+    }
+  }
+  if (!isClearable(specs, at)) {
+    layoutSource.state = 'fallback';
+    console.info('[levelAI] kept the handcrafted layout: the proposal asked for a jump the ninja cannot make');
+    return;
+  }
+  layoutSource.state = 'ai';
+  console.info(`[levelAI] applied the AI layout (${shuffled ? 'shuffled and nudged' : 'nudged'} layout, ${lastAttempt.ms}ms)`);
+  level.forEach((piece) => {
+    const p = at.get(String(piece.id));
+    if (p) {
+      piece.x = p.x;
+      piece.y = p.y;
+    }
+  });
+})();
+
+/** Wait until the layout has been decided (nudges applied, or the fallback kept). */
+export const awaitLayout = () => layoutReady;
 
 // Burnable vines: they cover the overgrown bridge until Ember burns them away (they stay burnt)
 export const VINE_BURN_TIME = 2.2; // seconds for the fire to sweep across the bridge
